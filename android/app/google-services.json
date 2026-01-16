@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "937075343139",
+    "project_id": "goglyder",
+    "storage_bucket": "goglyder.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:937075343139:android:066a2ef7435e4db6d01696",
+        "android_client_info": {
+          "package_name": "com.trydentlabs.goglyder.go_glyder"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAy5NNMXdtc6qCNSrmHZTzn6uLH06A-89M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
