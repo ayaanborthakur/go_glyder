@@ -56,10 +56,7 @@ class _HomepageState extends State<Homepage> {
             label: 'Messages',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.search_off_rounded),
-            label: 'Find Route',
-          ),
-          BottomNavigationBarItem( // New tab for community
+            // New tab for community
             icon: Icon(Icons.group),
             label: 'Community',
           ),
