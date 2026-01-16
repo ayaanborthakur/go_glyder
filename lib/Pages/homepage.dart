@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'searchpage.dart';
 import 'calendar.dart';
 import 'analytics.dart';
 import 'messages.dart';
@@ -26,12 +27,14 @@ class _HomepageState extends State<Homepage> {
     CalendarPage(), // Calendar with events and ride scheduling
     AnalyticsPage(), // Page with graphs and user statistics
     MessagesPage(), // Messaging system for users to communicate
+    SearchPage(), // Route finder with options for carpooling
     CommunityPage(), // Community page for user interactions
   ];
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+      print(_selectedIndex);
     });
   }
 
@@ -59,7 +62,8 @@ class _HomepageState extends State<Homepage> {
             icon: Icon(Icons.search_off_rounded),
             label: 'Find Route',
           ),
-          BottomNavigationBarItem( // New tab for community
+          BottomNavigationBarItem(
+            // New tab for community
             icon: Icon(Icons.group),
             label: 'Community',
           ),
