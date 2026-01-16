@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_glyder/Services/gmaps.dart';
+import 'package:flutter/widget_previews.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({Key? key}) : super(key: key);
@@ -12,7 +13,9 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Search')),
+      appBar: AppBar(
+          title: const Text('Search')
+      ),
       body: Center(
         child: Column(
           children: <Widget>[
@@ -22,10 +25,17 @@ class _SearchPageState extends State<SearchPage> {
                 // Logic to search for users
               },
             ),
-            MapScreen(),
+            Expanded(
+              child: MapScreen(),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+@Preview(name: 'SearchPage')
+Widget previewSearchPage() {
+  return const SearchPage();
 }
