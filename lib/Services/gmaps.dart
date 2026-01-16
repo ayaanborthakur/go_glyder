@@ -9,26 +9,228 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  final Color darkGreen = const Color(0xFF023020);
+  final Color lightGreen = const Color(0xFF90EE90);
+
+  GoogleMapController? _mapController;
+
   // Define the initial camera position
   static const CameraPosition _kInitialPosition = CameraPosition(
-    target: LatLng(37.42796133580664, -122.085749655962), // Example: GooglePlex
+    target: LatLng(37.42796133580664, -122.085749655962),
     zoom: 14.0,
   );
+
+  final Set<Marker> _markers = {
+    const Marker(
+      markerId: MarkerId('school'),
+      position: LatLng(37.42796133580664, -122.085749655962),
+      infoWindow: InfoWindow(title: 'School', snippet: 'Your school location'),
+    ),
+  };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('GoGlyder Map'),
+        backgroundColor: darkGreen,
+        foregroundColor: Colors.white,
+        title: const Text(
+          'GoGlyder Map',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.my_location),
+            onPressed: () {
+              _mapController?.animateCamera(
+                CameraUpdate.newCameraPosition(_kInitialPosition),
+              );
+            },
+          ),
+        ],
       ),
-      // Use the GoogleMap widget
-      body: GoogleMap(
-        initialCameraPosition: _kInitialPosition,
-        // You can customize the map type, add markers, polylines, etc.
-        mapType: MapType.normal,
-        onMapCreated: (GoogleMapController controller) {
-          // You can use the controller to programmatically move the camera, etc.
-        },
+      body: Column(
+        children: [
+          // Map takes most of the space
+          Expanded(
+            child: Stack(
+              children: [
+                GoogleMap(
+                  initialCameraPosition: _kInitialPosition,
+                  mapType: MapType.normal,
+                  markers: _markers,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  onMapCreated: (GoogleMapController controller) {
+                    _mapController = controller;
+                  },
+                ),
+                // Zoom controls overlay
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: Column(
+                    children: [
+                      _buildMapButton(
+                        icon: Icons.add,
+                        onPressed: () {
+                          _mapController?.animateCamera(CameraUpdate.zoomIn());
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildMapButton(
+                        icon: Icons.remove,
+                        onPressed: () {
+                          _mapController?.animateCamera(CameraUpdate.zoomOut());
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Bottom info panel
+          _buildBottomPanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMapButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: darkGreen),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  Widget _buildBottomPanel() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: lightGreen.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.school, color: darkGreen, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'School Location',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: darkGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap on the map to explore routes',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Route planning coming soon!'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.directions),
+                  label: const Text('Get Directions'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: darkGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: lightGreen.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.share, color: darkGreen),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Share location coming soon!'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
