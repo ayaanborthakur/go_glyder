@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "937075343139",
+    "firebase_url": "https://goglyder-default-rtdb.firebaseio.com",
     "project_id": "goglyder",
     "storage_bucket": "goglyder.firebasestorage.app"
   },
@@ -12,7 +13,12 @@
           "package_name": "com.trydentlabs.goglyder.go_glyder"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "937075343139-a404mf4ffhkgnbbus8jkec82gpfhan7r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAy5NNMXdtc6qCNSrmHZTzn6uLH06A-89M"
@@ -20,7 +26,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "937075343139-a404mf4ffhkgnbbus8jkec82gpfhan7r.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "937075343139-2qvlg0tbtbv93ji7tf12h4dir4bnb1sg.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.trydentlabs.goglyder.goGlyder"
+              }
+            }
+          ]
         }
       }
     }

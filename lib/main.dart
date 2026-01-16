@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_glyder/firebase.dart';
-import 'package:go_glyder/firebase_options.dart';
+import 'package:go_glyder/Services/firebase.dart';
+import 'package:go_glyder/Services/firebase_options.dart';
 // ...
 
 
