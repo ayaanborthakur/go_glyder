@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'calendar.dart';
 import 'analytics.dart';
 import 'messages.dart';
-import '../find_route.dart';
 import 'community.dart'; // New import for community features
 
 Color darkGreen = const Color(0xFF023020);
@@ -27,7 +26,6 @@ class _HomepageState extends State<Homepage> {
     CalendarPage(), // Calendar with events and ride scheduling
     AnalyticsPage(), // Page with graphs and user statistics
     MessagesPage(), // Messaging system for users to communicate
-    FindRoutePage(), // Route finder with options for carpooling
     CommunityPage(), // Community page for user interactions
   ];
 
