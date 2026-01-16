@@ -40,7 +40,7 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
+  static final FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyC1vqxYcTwlCHx1uYsxtEW3GxE5RBu-gA8',
     appId: '1:937075343139:web:ee2bd594a69ebfeed01696',
     messagingSenderId: '937075343139',
@@ -50,7 +50,7 @@ class DefaultFirebaseOptions {
     measurementId: 'G-BQ1M8L0TND',
   );
 
-  static const FirebaseOptions android = FirebaseOptions(
+  static final FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAy5NNMXdtc6qCNSrmHZTzn6uLH06A-89M',
     appId: '1:937075343139:android:066a2ef7435e4db6d01696',
     messagingSenderId: '937075343139',
@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
     storageBucket: 'goglyder.firebasestorage.app',
   );
 
-  static const FirebaseOptions ios = FirebaseOptions(
+  static final FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBkRpsKMGJmOlJUyByG2fbdaXilNYjKhfs',
     appId: '1:937075343139:ios:842b44a4d648ff47d01696',
     messagingSenderId: '937075343139',
@@ -67,7 +67,7 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.trydentlabs.goglyder.goGlyder',
   );
 
-  static const FirebaseOptions macos = FirebaseOptions(
+  static final FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyBkRpsKMGJmOlJUyByG2fbdaXilNYjKhfs',
     appId: '1:937075343139:ios:842b44a4d648ff47d01696',
     messagingSenderId: '937075343139',
@@ -76,7 +76,7 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.trydentlabs.goglyder.goGlyder',
   );
 
-  static const FirebaseOptions windows = FirebaseOptions(
+  static final FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyC1vqxYcTwlCHx1uYsxtEW3GxE5RBu-gA8',
     appId: '1:937075343139:web:9d62a051df6cb4a9d01696',
     messagingSenderId: '937075343139',

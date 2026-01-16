@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:go_glyder/firebase.dart';
+import 'package:go_glyder/firebase_options.dart';
+// ...
+
+
+
 
 void main() {
+  final db = initializeFirebase();
   runApp(const MyApp());
+
 }
 
 class MyApp extends StatelessWidget {
