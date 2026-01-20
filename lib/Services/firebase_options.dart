@@ -25,9 +25,15 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        return macos;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -40,49 +46,30 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static final FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyC1vqxYcTwlCHx1uYsxtEW3GxE5RBu-gA8',
-    appId: '1:937075343139:web:ee2bd594a69ebfeed01696',
-    messagingSenderId: '937075343139',
-    projectId: 'goglyder',
-    authDomain: 'goglyder.firebaseapp.com',
-    storageBucket: 'goglyder.firebasestorage.app',
-    measurementId: 'G-BQ1M8L0TND',
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyDGVB07YMExQstGolch-cZIrSTpuojAuO8',
+    appId: '1:163214469630:web:08fe2ebc779f536a8178af',
+    messagingSenderId: '163214469630',
+    projectId: 'trydentlabs-goglyder',
+    authDomain: 'trydentlabs-goglyder.firebaseapp.com',
+    storageBucket: 'trydentlabs-goglyder.firebasestorage.app',
+    measurementId: 'G-QR616XZZ35',
   );
 
-  static final FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAy5NNMXdtc6qCNSrmHZTzn6uLH06A-89M',
-    appId: '1:937075343139:android:066a2ef7435e4db6d01696',
-    messagingSenderId: '937075343139',
-    projectId: 'goglyder',
-    storageBucket: 'goglyder.firebasestorage.app',
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyBUJH-w7afuUjVC_AH7DqiaBcsXO4zrjYg',
+    appId: '1:163214469630:android:f123785a4ad57d6e8178af',
+    messagingSenderId: '163214469630',
+    projectId: 'trydentlabs-goglyder',
+    storageBucket: 'trydentlabs-goglyder.firebasestorage.app',
   );
 
-  static final FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBkRpsKMGJmOlJUyByG2fbdaXilNYjKhfs',
-    appId: '1:937075343139:ios:842b44a4d648ff47d01696',
-    messagingSenderId: '937075343139',
-    projectId: 'goglyder',
-    storageBucket: 'goglyder.firebasestorage.app',
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyDzbO0i0glmwBxqG0qBO2zmwnsmcREUS6o',
+    appId: '1:163214469630:ios:8f68c75acee270e28178af',
+    messagingSenderId: '163214469630',
+    projectId: 'trydentlabs-goglyder',
+    storageBucket: 'trydentlabs-goglyder.firebasestorage.app',
     iosBundleId: 'com.trydentlabs.goglyder.goGlyder',
-  );
-
-  static final FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyBkRpsKMGJmOlJUyByG2fbdaXilNYjKhfs',
-    appId: '1:937075343139:ios:842b44a4d648ff47d01696',
-    messagingSenderId: '937075343139',
-    projectId: 'goglyder',
-    storageBucket: 'goglyder.firebasestorage.app',
-    iosBundleId: 'com.trydentlabs.goglyder.goGlyder',
-  );
-
-  static final FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyC1vqxYcTwlCHx1uYsxtEW3GxE5RBu-gA8',
-    appId: '1:937075343139:web:9d62a051df6cb4a9d01696',
-    messagingSenderId: '937075343139',
-    projectId: 'goglyder',
-    authDomain: 'goglyder.firebaseapp.com',
-    storageBucket: 'goglyder.firebasestorage.app',
-    measurementId: 'G-EJ6T733K5L',
   );
 }

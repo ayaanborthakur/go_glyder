@@ -24,7 +24,7 @@ class CalendarPage extends StatefulWidget {
 
 class _CalendarPageState extends State<CalendarPage> {
   final Color darkGreen = const Color(0xFF023020);
-  final Color lightGreen = const Color(0xFF90EE90);
+  final Color lightGreen = const Color(0xFF72BF72);
 
   DateTime _selectedDate = DateTime.now();
   DateTime _focusedMonth = DateTime.now();

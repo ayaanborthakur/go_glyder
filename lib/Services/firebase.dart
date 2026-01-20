@@ -4,16 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 
 Future<FirebaseFirestore> initializeFirebase() async {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
   final db = FirebaseFirestore.instance;
   return db;
 }
-
-
-
-
-
-
-

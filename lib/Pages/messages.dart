@@ -32,7 +32,7 @@ class Contact {
 }
 
 class MessagesPage extends StatefulWidget {
-  const MessagesPage({Key? key}) : super(key: key);
+  const MessagesPage({super.key});
 
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -481,7 +481,7 @@ class _MessagesPageState extends State<MessagesPage> {
       children: [
         Expanded(
           child: ListView.separated(
-            separatorBuilder: (_, __) =>
+            separatorBuilder: (_, _) =>
                 Divider(height: 1, color: Colors.grey[200]),
             itemCount: _contacts.length,
             itemBuilder: (context, index) {
@@ -513,7 +513,7 @@ class _MessagesPageState extends State<MessagesPage> {
       },
       child: Container(
         color: isSelected
-            ? Color(0xFF007AFF).withOpacity(0.1)
+            ? Color(0x1A007AFF)
             : Colors.transparent,
         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
@@ -612,8 +612,8 @@ class _MessagesPageState extends State<MessagesPage> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Color(0xFF007AFF).withOpacity(0.1),
-                    Color(0xFF34C759).withOpacity(0.1),
+                    Color(0x1A007AFF),
+                    Color(0x1A34C759),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -815,7 +815,7 @@ class _MessagesPageState extends State<MessagesPage> {
   Widget _buildMessageBubble(Message message) {
     final isUser = message.isUser;
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 10),
       child: Row(
         mainAxisAlignment: isUser
             ? MainAxisAlignment.end
@@ -856,6 +856,7 @@ class _MessagesPageState extends State<MessagesPage> {
                     ),
                   ],
                 ),
+
                 child: Text(
                   message.text,
                   style: TextStyle(
@@ -865,6 +866,7 @@ class _MessagesPageState extends State<MessagesPage> {
                   ),
                 ),
               ),
+
               SizedBox(height: 4),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12),
@@ -878,6 +880,7 @@ class _MessagesPageState extends State<MessagesPage> {
           if (isUser) SizedBox(width: 8),
         ],
       ),
+
     );
   }
 
