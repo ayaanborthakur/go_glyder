@@ -1,11 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
+}
+
+Future<Position> _determinePosition() async {
+  bool serviceEnabled;
+  LocationPermission permission;
+
+  // Test if location services are enabled.
+  serviceEnabled = await Geolocator.isLocationServiceEnabled();
+  if (!serviceEnabled) {
+    // Location services are not enabled don't continue
+    // accessing the position and request users of the
+    // App to enable the location services.
+    return Future.error('Location services are disabled.');
+  }
+
+  permission = await Geolocator.checkPermission();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied) {
+      // Permissions are denied, next time you could try
+      // requesting permissions again (this is also where
+      // Android's shouldShowRequestPermissionRationale
+      // returned true. According to Android guidelines
+      // your App should show an explanatory UI now.
+      return Future.error('Location permissions are denied');
+    }
+  }
+
+  if (permission == LocationPermission.deniedForever) {
+    // Permissions are denied forever, handle appropriately.
+    return Future.error(
+      'Location permissions are permanently denied, we cannot request permissions.',
+    );
+  }
+
+  // When we reach here, permissions are granted and we can
+  // continue accessing the position of the device.
+  return await Geolocator.getCurrentPosition();
 }
 
 class _MapScreenState extends State<MapScreen> {
@@ -15,8 +54,9 @@ class _MapScreenState extends State<MapScreen> {
   GoogleMapController? _mapController;
 
   // Define the initial camera position
+  // A default position (e.g., GooglePlex) in case location fails on startup
   static const CameraPosition _kInitialPosition = CameraPosition(
-    target: LatLng(37.42796133580664, -122.085749655962),
+    target: LatLng(37.422, -122.084), // Fallback location
     zoom: 14.0,
   );
 
@@ -27,6 +67,22 @@ class _MapScreenState extends State<MapScreen> {
       infoWindow: InfoWindow(title: 'School', snippet: 'Your school location'),
     ),
   };
+
+  Future<void> _goToCurrentLocation() async {
+    try {
+      Position position = await _determinePosition();
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(position.latitude, position.longitude),
+            zoom: 16.0,
+          ),
+        ),
+      );
+    } catch (e) {
+      print(e);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,14 +97,9 @@ class _MapScreenState extends State<MapScreen> {
         ),
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.my_location),
-            onPressed: () {
-              _mapController?.animateCamera(
-                CameraUpdate.newCameraPosition(_kInitialPosition),
-              );
-            },
-          ),
+          IconButton(icon: const Icon(Icons.my_location), onPressed: () {
+            _goToCurrentLocation();
+          }),
         ],
       ),
       body: Column(

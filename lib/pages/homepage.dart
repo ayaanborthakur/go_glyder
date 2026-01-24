@@ -1,9 +1,4 @@
 import 'package:flutter/material.dart';
-import 'searchpage.dart';
-import 'calendar.dart';
-import 'analytics.dart';
-import 'messages.dart';
-import 'community.dart';
 
 Color darkGreen = const Color(0xFF023020);
 Color lightGreen = const Color(0xFF90EE90);
@@ -16,52 +11,9 @@ class Homepage extends StatefulWidget {
 }
 
 class _HomepageState extends State<Homepage> {
-  int _selectedIndex = 0;
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          _buildHomePage(),
-          const CalendarPage(),
-          const AnalyticsPage(),
-          const MessagesPage(),
-          const SearchPage(),
-          const CommunityPage(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today),
-            label: 'Calendar',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.analytics),
-            label: 'Analytics',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.message_rounded),
-            label: 'Messages',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-          BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Community'),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: darkGreen,
-        onTap: _onItemTapped,
-      ),
-    );
+    return _buildHomePage();
   }
 
   Widget _buildHomePage() {
@@ -180,27 +132,7 @@ class _HomepageState extends State<Homepage> {
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionCard(
-                  icon: Icons.add_circle_outline,
-                  title: 'New Ride',
-                  subtitle: 'Create carpool',
-                  onTap: () => _onItemTapped(4),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildActionCard(
-                  icon: Icons.calendar_month,
-                  title: 'Events',
-                  subtitle: 'View calendar',
-                  onTap: () => _onItemTapped(1),
-                ),
-              ),
-            ],
-          ),
+          Row(children: [const SizedBox(width: 16)]),
         ],
       ),
     );
@@ -337,32 +269,6 @@ class _HomepageState extends State<Homepage> {
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
             childAspectRatio: 1.1,
-            children: [
-              _buildFeatureCard(
-                icon: Icons.map,
-                title: 'Route Finder',
-                description: 'Find the best routes',
-                onTap: () => _onItemTapped(4),
-              ),
-              _buildFeatureCard(
-                icon: Icons.analytics_outlined,
-                title: 'Analytics',
-                description: 'Track your rides',
-                onTap: () => _onItemTapped(2),
-              ),
-              _buildFeatureCard(
-                icon: Icons.message_outlined,
-                title: 'Messages',
-                description: 'Chat with riders',
-                onTap: () => _onItemTapped(3),
-              ),
-              _buildFeatureCard(
-                icon: Icons.people_outline,
-                title: 'Community',
-                description: 'Join carpool groups',
-                onTap: () => _onItemTapped(5),
-              ),
-            ],
           ),
         ],
       ),
