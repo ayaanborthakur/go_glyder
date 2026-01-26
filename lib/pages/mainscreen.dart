@@ -13,7 +13,7 @@ class MainScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    _onItemTapped(int index) {
+    onItemTapped(int index) {
       switch (index) {
         case 0:
           router.go('/');
@@ -33,10 +33,13 @@ class MainScreen extends StatelessWidget {
         case 5:
           router.go('/community');
           break;
+        case 6:
+          router.go('/login');
+          break;
       }
     }
 
-    _calculateSelectedIndex(BuildContext context) {
+    calculateSelectedIndex(BuildContext context) {
       switch (GoRouterState.of(context).uri.toString()) {
         case '/':
           return 0;
@@ -50,6 +53,9 @@ class MainScreen extends StatelessWidget {
           return 4;
         case '/community':
           return 5;
+        case '/login':
+          return 6;
+
         default:
           return 0;
       }
@@ -75,10 +81,11 @@ class MainScreen extends StatelessWidget {
           ),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
           BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Community'),
+          BottomNavigationBarItem(icon: Icon(Icons.login), label: 'Login'),
         ],
-        currentIndex: _calculateSelectedIndex(context),
+        currentIndex: calculateSelectedIndex(context),
         selectedItemColor: darkGreen1,
-        onTap: _onItemTapped,
+        onTap: onItemTapped,
       ),
     );
   }

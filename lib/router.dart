@@ -28,5 +28,9 @@ final router = GoRouter(
       path: '/community',
       builder: (context, state) => MainScreen(child: CommunityPage()),
     ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => MainScreen(child: (LoginScreen())),
+    ),
   ],
 );
