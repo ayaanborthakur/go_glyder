@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../router.dart';
+import '../core/router.dart';
 
 Color darkGreen1 = const Color(0xFF023020);
 Color lightGreen1 = const Color(0xFF90EE90);
