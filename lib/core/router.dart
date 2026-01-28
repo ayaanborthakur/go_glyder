@@ -1,6 +1,8 @@
 import 'package:go_router/go_router.dart';
 
-import '../pages/all.dart';
+import 'package:go_glyder/features/_index.g.dart';
+
+import 'mainscreen.dart';
 
 final router = GoRouter(
   routes: [
