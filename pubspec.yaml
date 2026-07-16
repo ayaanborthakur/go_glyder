@@ -43,6 +43,7 @@ dependencies:
   go_router: ^17.0.1
   firebase_auth: ^6.1.4
   flutter_animate: ^4.5.2
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +70,7 @@ flutter:
 
   assets:
     - lib/assets/logo.png
+    - lib/assets/google_logo.png
 
   fonts:
     - family: PlusJakartaSans

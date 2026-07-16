@@ -1,10 +1,20 @@
 // lib/features/account/scripts/auth.dart
 
+import 'dart:developer' as developer;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-/// Thrown when an auth action fails, carrying a user-friendly message
-/// that the UI can show directly.
+/// Web OAuth client ID from android/app/google-services.json (client_type 3).
+/// google_sign_in needs this as the serverClientId so it returns an ID token
+/// whose audience Firebase will accept.
+const String kGoogleServerClientId =
+    '163214469630-v7g1bmsgsjsrvf9j0npg98om8398vjo7.apps.googleusercontent.com';
+
+/// Thrown when an auth action fails, carrying a user-friendly message.
 class AuthException implements Exception {
   final String message;
   AuthException(this.message);
@@ -14,86 +24,103 @@ class AuthException implements Exception {
 }
 
 class AuthService {
-  // Get an instance of FirebaseAuth to use its features
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
 
-  // STREAM: Listens for changes in the user's authentication state (logged in or out).
-  // The router listens to this to decide whether to show the login screen.
+  // Router listens to this to decide whether to show the login screen.
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
-  // GET CURRENT USER: A quick way to get the current user object if one exists.
   User? get currentUser => _firebaseAuth.currentUser;
 
-  // SIGN UP with Email and Password
-  Future<UserCredential> signUpWithEmailAndPassword({
-    required String email,
-    required String password,
-  }) async {
+  /// Signs in with Google. Returns the credential, or `null` if the user
+  /// dismissed the Google account picker (a cancel, not an error).
+  Future<UserCredential?> signInWithGoogle() async {
     try {
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      // Create the user's profile document so the account is a real record.
-      final user = credential.user;
-      if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'email': email,
-          'displayName': email.split('@').first,
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+      // google_sign_in v7: authenticate() shows the native account picker.
+      final GoogleSignInAccount account =
+          await GoogleSignIn.instance.authenticate();
+
+      final idToken = account.authentication.idToken;
+      if (idToken == null) {
+        throw AuthException('Google sign-in failed. Please try again.');
       }
-      return credential;
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(_friendlyMessage(e));
-    } catch (_) {
-      throw AuthException('Something went wrong. Please try again.');
-    }
-  }
 
-  // SIGN IN with Email and Password
-  Future<UserCredential> signInWithEmailAndPassword({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      return await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
+      final credential = GoogleAuthProvider.credential(idToken: idToken);
+      final userCredential = await _firebaseAuth.signInWithCredential(
+        credential,
       );
+      await _upsertUserDoc(userCredential.user);
+      return userCredential;
+    } on GoogleSignInException catch (e) {
+      // User backed out of the picker — not a real error.
+      if (e.code == GoogleSignInExceptionCode.canceled) return null;
+      throw AuthException('Google sign-in failed. Please try again.');
     } on FirebaseAuthException catch (e) {
-      throw AuthException(_friendlyMessage(e));
+      throw AuthException(e.message ?? 'Sign-in failed. Please try again.');
+    } on AuthException {
+      rethrow;
     } catch (_) {
       throw AuthException('Something went wrong. Please try again.');
     }
   }
 
-  // SIGN OUT
-  Future<void> signOut() async {
-    await _firebaseAuth.signOut();
+  /// Signs in with Microsoft via Firebase's OAuth provider. Returns the
+  /// credential, or `null` if the user cancels the flow.
+  ///
+  /// No extra package needed — [MicrosoftAuthProvider] is built into
+  /// firebase_auth. Requires the Microsoft provider to be enabled in the
+  /// Firebase console (backed by an Azure AD app registration).
+  Future<UserCredential?> signInWithMicrosoft() async {
+    try {
+      final provider = MicrosoftAuthProvider()
+        ..setCustomParameters({'prompt': 'select_account'});
+
+      final userCredential = kIsWeb
+          ? await _firebaseAuth.signInWithPopup(provider)
+          : await _firebaseAuth.signInWithProvider(provider);
+
+      await _upsertUserDoc(userCredential.user);
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      // Various cancel codes across platforms — treat as a no-op.
+      const cancelCodes = {
+        'web-context-canceled',
+        'web-context-cancelled',
+        'canceled',
+        'user-cancelled',
+        'popup-closed-by-user',
+      };
+      if (cancelCodes.contains(e.code)) return null;
+      throw AuthException(e.message ?? 'Microsoft sign-in failed. Try again.');
+    } catch (_) {
+      throw AuthException('Something went wrong. Please try again.');
+    }
   }
 
-  // Maps raw Firebase error codes to messages a person can actually understand.
-  String _friendlyMessage(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'That email address doesn\'t look right.';
-      case 'user-disabled':
-        return 'This account has been disabled.';
-      case 'user-not-found':
-      case 'wrong-password':
-      case 'invalid-credential':
-        return 'Incorrect email or password.';
-      case 'email-already-in-use':
-        return 'An account already exists for that email.';
-      case 'weak-password':
-        return 'Please use a stronger password (at least 6 characters).';
-      case 'network-request-failed':
-        return 'No internet connection. Please check and try again.';
-      case 'too-many-requests':
-        return 'Too many attempts. Please wait a moment and try again.';
-      default:
-        return e.message ?? 'Authentication failed. Please try again.';
+  /// Creates/updates the user's profile document so the account is a real
+  /// record and future per-user data has somewhere to live.
+  ///
+  /// Best-effort: a failure here (e.g. Firestore rules not yet deployed) must
+  /// NOT fail the sign-in — the user is already authenticated at this point.
+  Future<void> _upsertUserDoc(User? user) async {
+    if (user == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'email': user.email,
+        'displayName': user.displayName ?? user.email?.split('@').first,
+        'photoUrl': user.photoURL,
+        'lastSignInAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      developer.log(
+        'Could not write user profile doc',
+        name: 'GoGlyder.Auth',
+        error: e,
+      );
     }
+  }
+
+  Future<void> signOut() async {
+    await GoogleSignIn.instance.signOut();
+    await _firebaseAuth.signOut();
   }
 }

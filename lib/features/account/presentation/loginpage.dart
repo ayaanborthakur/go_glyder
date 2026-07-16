@@ -15,56 +15,20 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
-
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmController = TextEditingController();
-
-  bool _isLogin = true; // true = Sign In, false = Sign Up
-  bool _obscurePassword = true;
   bool _isLoading = false;
 
-  static const Color _fieldFill = Color(0xFFF1F4F3);
+  Future<void> _signInWithGoogle() => _runSignIn(_authService.signInWithGoogle);
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmController.dispose();
-    super.dispose();
-  }
+  Future<void> _signInWithMicrosoft() =>
+      _runSignIn(_authService.signInWithMicrosoft);
 
-  void _setMode(bool login) {
-    if (_isLogin == login || _isLoading) return;
-    setState(() {
-      _isLogin = login;
-      _formKey.currentState?.reset();
-    });
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    FocusScope.of(context).unfocus();
+  Future<void> _runSignIn(Future<Object?> Function() action) async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
-
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
     try {
-      if (_isLogin) {
-        await _authService.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      } else {
-        await _authService.signUpWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      }
       // On success the router's auth listener redirects into the app.
+      // A null result means the user dismissed the picker — do nothing.
+      await action();
     } on AuthException catch (e) {
       _showError(e.message);
     } finally {
@@ -97,27 +61,19 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           const _AuroraBackground(),
           SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight - 52,
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildBranding(),
-                        const SizedBox(height: 30),
-                        _buildCard(),
-                        const SizedBox(height: 18),
-                        _buildFooter(),
-                      ],
-                    ),
-                  ),
-                );
-              },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Column(
+                children: [
+                  const Spacer(flex: 3),
+                  _buildBranding(),
+                  const Spacer(flex: 4),
+                  _buildSignInSection(),
+                  const SizedBox(height: 28),
+                  _buildFooter(),
+                  const Spacer(flex: 1),
+                ],
+              ),
             ),
           ),
         ],
@@ -128,18 +84,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildBranding() {
     return Column(
       children: [
-        // Solid white squircle so the dark-green logo reads crisply.
         Container(
-              width: 96,
-              height: 96,
-              padding: const EdgeInsets.all(15),
+              width: 100,
+              height: 100,
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.brandAccent.withValues(alpha: 0.35),
-                    blurRadius: 34,
+                    blurRadius: 36,
                     offset: const Offset(0, 14),
                   ),
                 ],
@@ -150,7 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 errorBuilder: (_, _, _) => const Icon(
                   Icons.directions_bus_rounded,
                   color: AppColors.brandDark,
-                  size: 46,
+                  size: 48,
                 ),
               ),
             )
@@ -162,297 +117,152 @@ class _LoginScreenState extends State<LoginScreen> {
               curve: Curves.easeOutBack,
             )
             .fadeIn(duration: 400.ms),
-        const SizedBox(height: 24),
-        Text(
-          _isLogin ? 'Welcome back' : 'Create account',
-          style: const TextStyle(
+        const SizedBox(height: 28),
+        const Text(
+          'GoGlyder',
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 30,
+            fontSize: 36,
             fontWeight: FontWeight.w800,
-            letterSpacing: -0.6,
+            letterSpacing: -0.8,
           ),
         ).animate(delay: 200.ms).fadeIn(duration: 500.ms).slideY(begin: 0.3, end: 0),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Text(
-          _isLogin
-              ? 'Sign in to keep your school moving greener'
-              : 'Join your school\'s carpooling community',
+          'Smarter, greener school carpooling',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.72),
-            fontSize: 14.5,
+            color: Colors.white.withValues(alpha: 0.75),
+            fontSize: 15.5,
             height: 1.4,
           ),
-        ).animate(delay: 320.ms).fadeIn(duration: 500.ms).slideY(begin: 0.3, end: 0),
+        ).animate(delay: 340.ms).fadeIn(duration: 500.ms).slideY(begin: 0.3, end: 0),
       ],
     );
   }
 
-  Widget _buildCard() {
-    return Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxWidth: 440),
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.28),
-                blurRadius: 46,
-                offset: const Offset(0, 20),
-              ),
-            ],
-          ),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildSegmentedToggle(),
-                const SizedBox(height: 22),
-                _field(
-                  controller: _emailController,
-                  hint: 'Email address',
-                  icon: Icons.mail_outline_rounded,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    final v = value?.trim() ?? '';
-                    if (v.isEmpty) return 'Please enter your email';
-                    if (!v.contains('@') || !v.contains('.')) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                _field(
-                  controller: _passwordController,
-                  hint: 'Password',
-                  icon: Icons.lock_outline_rounded,
-                  obscure: _obscurePassword,
-                  textInputAction:
-                      _isLogin ? TextInputAction.done : TextInputAction.next,
-                  onSubmitted: _isLogin ? (_) => _submit() : null,
-                  suffix: IconButton(
-                    splashRadius: 20,
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded,
-                      color: AppColors.textTertiary,
-                      size: 20,
-                    ),
-                    onPressed: () =>
-                        setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a password';
-                    }
-                    if (value.length < 6) {
-                      return 'Must be at least 6 characters';
-                    }
-                    return null;
-                  },
-                ),
-                if (!_isLogin) ...[
-                  const SizedBox(height: 14),
-                  _field(
-                    controller: _confirmController,
-                    hint: 'Confirm password',
-                    icon: Icons.lock_outline_rounded,
-                    obscure: _obscurePassword,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _submit(),
-                    validator: (value) {
-                      if (value != _passwordController.text) {
-                        return 'Passwords don\'t match';
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-                const SizedBox(height: 22),
-                _buildSubmitButton(),
-              ],
-            ),
-          ),
-        )
-        .animate(delay: 420.ms)
-        .fadeIn(duration: 550.ms)
-        .slideY(begin: 0.18, end: 0, curve: Curves.easeOutCubic);
-  }
-
-  Widget _field({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool obscure = false,
-    Widget? suffix,
-    TextInputType? keyboardType,
-    TextInputAction? textInputAction,
-    ValueChanged<String>? onSubmitted,
-    String? Function(String?)? validator,
-  }) {
-    OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: c, width: w),
-    );
-
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      enabled: !_isLoading,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      onFieldSubmitted: onSubmitted,
-      validator: validator,
-      style: const TextStyle(
-        color: AppColors.textPrimary,
-        fontSize: 15.5,
-        fontWeight: FontWeight.w500,
-      ),
-      cursorColor: AppColors.brandGreen,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: AppColors.textTertiary),
-        prefixIcon: Icon(icon, color: AppColors.textTertiary, size: 21),
-        suffixIcon: suffix,
-        filled: true,
-        fillColor: _fieldFill,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        border: border(Colors.transparent),
-        enabledBorder: border(Colors.transparent),
-        focusedBorder: border(AppColors.brandGreen, 1.6),
-        errorBorder: border(AppColors.danger),
-        focusedErrorBorder: border(AppColors.danger, 1.6),
-      ),
-    );
-  }
-
-  Widget _buildSegmentedToggle() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFF2F1),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          _segment('Sign In', _isLogin, () => _setMode(true)),
-          _segment('Sign Up', !_isLogin, () => _setMode(false)),
-        ],
-      ),
-    );
-  }
-
-  Widget _segment(String label, bool selected, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.brandDark : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: AppColors.brandDark.withValues(alpha: 0.25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.white : AppColors.textSecondary,
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSubmitButton() {
-    final button = GestureDetector(
-      onTap: _isLoading ? null : _submit,
-      child: Container(
-        height: 56,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [AppColors.brandAccent, AppColors.brandDark],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.brandDark.withValues(alpha: 0.35),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: _isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
+  Widget _buildSignInSection() {
+    final Widget content = _isLoading
+        ? const SizedBox(
+            height: 58,
+            child: Center(
+              child: SizedBox(
+                width: 26,
+                height: 26,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
                   valueColor: AlwaysStoppedAnimation(Colors.white),
                 ),
-              )
-            : Text(
-                _isLogin ? 'Sign In' : 'Create Account',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16.5,
-                  fontWeight: FontWeight.w700,
-                ),
               ),
+            ),
+          )
+        : Column(
+            children: [
+              _providerButton(
+                label: 'Continue with Google',
+                logo: Image.asset(
+                  'lib/assets/google_logo.png',
+                  height: 22,
+                  width: 22,
+                  errorBuilder: (_, _, _) =>
+                      const Icon(Icons.g_mobiledata_rounded, size: 24),
+                ),
+                onTap: _signInWithGoogle,
+              ),
+              const SizedBox(height: 14),
+              _providerButton(
+                label: 'Continue with Microsoft',
+                logo: const _MicrosoftLogo(size: 20),
+                onTap: _signInWithMicrosoft,
+              ),
+            ],
+          );
+
+    return content
+        .animate(delay: 480.ms)
+        .fadeIn(duration: 550.ms)
+        .slideY(begin: 0.2, end: 0);
+  }
+
+  Widget _providerButton({
+    required String label,
+    required Widget logo,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 58,
+      child: ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            logo,
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       ),
     );
-
-    // A slow, subtle light sweep keeps the primary action feeling alive.
-    if (_isLoading) return button;
-    return button
-        .animate(onPlay: (c) => c.repeat())
-        .shimmer(
-          delay: 1600.ms,
-          duration: 1600.ms,
-          color: Colors.white.withValues(alpha: 0.25),
-        );
   }
 
   Widget _buildFooter() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          _isLogin ? 'New to GoGlyder?' : 'Already have an account?',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
-        ),
-        TextButton(
-          onPressed: _isLoading ? null : () => _setMode(!_isLogin),
-          child: Text(
-            _isLogin ? 'Create one' : 'Sign in',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
+    return Text(
+      'By continuing you agree to GoGlyder\'s Terms & Privacy Policy',
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.55),
+        fontSize: 12.5,
+        height: 1.4,
+      ),
+    ).animate(delay: 620.ms).fadeIn(duration: 500.ms);
+  }
+}
+
+/// Microsoft's four-square brand mark, drawn directly (no asset needed).
+class _MicrosoftLogo extends StatelessWidget {
+  final double size;
+  const _MicrosoftLogo({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final tile = size / 2 - 1;
+    Widget square(Color c) =>
+        Container(width: tile, height: tile, color: c);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              square(const Color(0xFFF25022)), // red
+              square(const Color(0xFF7FBA00)), // green
+            ],
           ),
-        ),
-      ],
-    ).animate(delay: 600.ms).fadeIn(duration: 500.ms);
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              square(const Color(0xFF00A4EF)), // blue
+              square(const Color(0xFFFFB900)), // yellow
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

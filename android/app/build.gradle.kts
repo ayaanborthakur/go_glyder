@@ -27,7 +27,8 @@ android {
         applicationId = "com.trydentlabs.goglyder.go_glyder"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // google_sign_in v7 uses Android Credential Manager, which needs API 23+.
+        minSdk = maxOf(23, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
