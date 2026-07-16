@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'theme.dart';
 import 'router.dart';
 
 class MyApp extends StatelessWidget {
@@ -9,10 +10,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen),
-        useMaterial3: true,
-      ),
+      title: 'GoGlyder',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
       routerConfig: router,
     );
   }

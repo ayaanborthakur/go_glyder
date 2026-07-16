@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:go_glyder/Services/firebase.dart';
+import 'package:go_glyder/services/firebase.dart';
 
 import 'app.dart';
 

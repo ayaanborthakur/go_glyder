@@ -102,67 +102,57 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        backgroundColor: darkGreen,
-        foregroundColor: Colors.white,
-        title: const Text(
-          'GoGlyder Map',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        elevation: 0,
-        actions: [
-          IconButton(icon: const Icon(Icons.my_location), onPressed: () {
-            _goToCurrentLocation();
-          }),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Map takes most of the space
-          Expanded(
-            child: Stack(
-              children: [
-                GoogleMap(
-                  initialCameraPosition: _kInitialPosition,
-                  mapType: MapType.normal,
-                  markers: _markers,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  onMapCreated: (GoogleMapController controller) {
-                    _mapController = controller;
-                  },
+    // Embeddable widget (no Scaffold/AppBar) so the host screen owns the
+    // chrome and we don't end up with nested app bars.
+    return Column(
+      children: [
+        // Map takes most of the space
+        Expanded(
+          child: Stack(
+            children: [
+              GoogleMap(
+                initialCameraPosition: _kInitialPosition,
+                mapType: MapType.normal,
+                markers: _markers,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                onMapCreated: (GoogleMapController controller) {
+                  _mapController = controller;
+                },
+              ),
+              // Floating controls overlay
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: Column(
+                  children: [
+                    _buildMapButton(
+                      icon: Icons.my_location,
+                      onPressed: _goToCurrentLocation,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMapButton(
+                      icon: Icons.add,
+                      onPressed: () {
+                        _mapController?.animateCamera(CameraUpdate.zoomIn());
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _buildMapButton(
+                      icon: Icons.remove,
+                      onPressed: () {
+                        _mapController?.animateCamera(CameraUpdate.zoomOut());
+                      },
+                    ),
+                  ],
                 ),
-                // Zoom controls overlay
-                Positioned(
-                  right: 16,
-                  bottom: 16,
-                  child: Column(
-                    children: [
-                      _buildMapButton(
-                        icon: Icons.add,
-                        onPressed: () {
-                          _mapController?.animateCamera(CameraUpdate.zoomIn());
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _buildMapButton(
-                        icon: Icons.remove,
-                        onPressed: () {
-                          _mapController?.animateCamera(CameraUpdate.zoomOut());
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          // Bottom info panel
-          _buildBottomPanel(),
-        ],
-      ),
+        ),
+        // Bottom info panel
+        _buildBottomPanel(),
+      ],
     );
   }
 
