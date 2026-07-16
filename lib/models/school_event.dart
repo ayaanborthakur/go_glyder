@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// A calendar event belonging to a user. Persisted in Firestore under
-/// `users/{uid}/events`.
+/// A calendar event. Read from the shared `calendarEvents` collection;
+/// writes go through [FirestoreService].
 class SchoolEvent {
   final String id;
   final String title;
@@ -28,13 +28,4 @@ class SchoolEvent {
       time: (data['time'] ?? '') as String,
     );
   }
-
-  Map<String, dynamic> toMap() => {
-    'title': title,
-    'description': description,
-    // Store the date normalized to midnight so day-matching is reliable.
-    'date': Timestamp.fromDate(DateTime(date.year, date.month, date.day)),
-    'time': time,
-    'createdAt': FieldValue.serverTimestamp(),
-  };
 }

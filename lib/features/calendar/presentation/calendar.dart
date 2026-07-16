@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'package:go_glyder/features/calendar/data/event_repository.dart';
 import 'package:go_glyder/models/school_event.dart';
+import 'package:go_glyder/services/firestore_service.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -17,21 +18,23 @@ class _CalendarPageState extends State<CalendarPage> {
   final Color darkGreen = const Color(0xFF023020);
   final Color lightGreen = const Color(0xFF72BF72);
 
-  final EventRepository _repo = EventRepository();
-  StreamSubscription<List<SchoolEvent>>? _sub;
+  final FirestoreService _firestore = FirestoreService.instance;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
 
   DateTime _selectedDate = DateTime.now();
   DateTime _focusedMonth = DateTime.now();
 
-  // Events come live from Firestore, so a new account starts with none.
+  // Events come live from Firestore (shared `calendarEvents` collection).
   List<SchoolEvent> _events = [];
 
   @override
   void initState() {
     super.initState();
-    _sub = _repo.watchEvents().listen((events) {
+    _sub = _firestore.streamCalendarEvents().listen((snap) {
       if (mounted) {
-        setState(() => _events = events);
+        setState(() {
+          _events = snap.docs.map(SchoolEvent.fromDoc).toList();
+        });
       }
     });
   }
@@ -207,14 +210,11 @@ class _CalendarPageState extends State<CalendarPage> {
     );
 
     if (saved == true) {
-      await _repo.addEvent(
-        SchoolEvent(
-          id: '',
-          title: titleController.text.trim(),
-          description: descController.text.trim(),
-          date: pickedDate,
-          time: pickedTime?.format(context) ?? 'All Day',
-        ),
+      await _firestore.createCalendarEvent(
+        title: titleController.text.trim(),
+        description: descController.text.trim(),
+        date: pickedDate,
+        time: pickedTime?.format(context) ?? 'All Day',
       );
       if (mounted) setState(() => _selectedDate = pickedDate);
     }
@@ -242,7 +242,7 @@ class _CalendarPageState extends State<CalendarPage> {
       ),
     );
     if (confirmed == true) {
-      await _repo.deleteEvent(event.id);
+      await _firestore.deleteCalendarEvent(event.id);
     }
   }
 
