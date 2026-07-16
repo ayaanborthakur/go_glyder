@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -79,8 +81,22 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ),
       );
-    } catch (e) {
-      print(e);
+    } catch (e, stackTrace) {
+      // Log through dart:developer so it goes to the proper logging channel
+      // (and doesn't trip the avoid_print lint) instead of a raw print.
+      developer.log(
+        'Failed to get current location',
+        name: 'GoGlyder.Map',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Couldn\'t get your location: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
