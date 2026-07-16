@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:go_glyder/core/theme.dart';
@@ -22,13 +23,26 @@ class _HomepageState extends State<Homepage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
+            _buildHeader().animate().fadeIn(duration: 400.ms).slideY(
+              begin: -0.15,
+              end: 0,
+              curve: Curves.easeOut,
+            ),
             const SizedBox(height: AppSpacing.xl),
-            _buildQuickActions(),
+            _buildQuickActions()
+                .animate(delay: 120.ms)
+                .fadeIn(duration: 450.ms)
+                .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.xl),
-            _buildUpcomingSection(),
+            _buildUpcomingSection()
+                .animate(delay: 240.ms)
+                .fadeIn(duration: 450.ms)
+                .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.xl),
-            _buildFeaturesGrid(),
+            _buildFeaturesGrid()
+                .animate(delay: 360.ms)
+                .fadeIn(duration: 450.ms)
+                .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.xxl),
           ],
         ),

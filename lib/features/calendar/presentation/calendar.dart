@@ -1,19 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class SchoolEvent {
-  final String title;
-  final String description;
-  final DateTime date;
-  final String time;
-
-  SchoolEvent({
-    required this.title,
-    required this.description,
-    required this.date,
-    required this.time,
-  });
-}
+import 'package:go_glyder/features/calendar/data/event_repository.dart';
+import 'package:go_glyder/models/school_event.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -26,60 +17,30 @@ class _CalendarPageState extends State<CalendarPage> {
   final Color darkGreen = const Color(0xFF023020);
   final Color lightGreen = const Color(0xFF72BF72);
 
+  final EventRepository _repo = EventRepository();
+  StreamSubscription<List<SchoolEvent>>? _sub;
+
   DateTime _selectedDate = DateTime.now();
   DateTime _focusedMonth = DateTime.now();
 
-  // Sample school events
-  final List<SchoolEvent> _events = [
-    SchoolEvent(
-      title: 'School Assembly',
-      description: 'Monthly assembly in the auditorium',
-      date: DateTime(2026, 1, 20),
-      time: '9:00 AM',
-    ),
-    SchoolEvent(
-      title: 'Basketball Game',
-      description: 'Home game vs. Lincoln High',
-      date: DateTime(2026, 1, 23),
-      time: '4:00 PM',
-    ),
-    SchoolEvent(
-      title: 'Parent-Teacher Conference',
-      description: 'Spring semester check-in meetings',
-      date: DateTime(2026, 1, 27),
-      time: '2:00 PM - 6:00 PM',
-    ),
-    SchoolEvent(
-      title: 'Science Fair',
-      description: 'Annual science project exhibition',
-      date: DateTime(2026, 2, 3),
-      time: '10:00 AM',
-    ),
-    SchoolEvent(
-      title: 'Field Trip - Museum',
-      description: 'Visit to the Natural History Museum',
-      date: DateTime(2026, 2, 10),
-      time: '8:30 AM',
-    ),
-    SchoolEvent(
-      title: 'Math Club Meeting',
-      description: 'Weekly math club session',
-      date: DateTime(2026, 2, 12),
-      time: '3:30 PM',
-    ),
-    SchoolEvent(
-      title: 'Winter Break',
-      description: 'No classes - winter vacation',
-      date: DateTime(2026, 2, 17),
-      time: 'All Day',
-    ),
-    SchoolEvent(
-      title: 'Drama Performance',
-      description: 'Spring play opening night',
-      date: DateTime(2026, 2, 21),
-      time: '7:00 PM',
-    ),
-  ];
+  // Events come live from Firestore, so a new account starts with none.
+  List<SchoolEvent> _events = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = _repo.watchEvents().listen((events) {
+      if (mounted) {
+        setState(() => _events = events);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
 
   List<SchoolEvent> _getEventsForDate(DateTime date) {
     return _events.where((event) {
@@ -118,6 +79,13 @@ class _CalendarPageState extends State<CalendarPage> {
         ),
         elevation: 0,
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddEventDialog,
+        backgroundColor: darkGreen,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Event'),
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -136,6 +104,146 @@ class _CalendarPageState extends State<CalendarPage> {
         },
       ),
     );
+  }
+
+  Future<void> _showAddEventDialog() async {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    DateTime pickedDate = _selectedDate;
+    TimeOfDay? pickedTime;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('New Event'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(labelText: 'Title'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: descController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.calendar_today, size: 18),
+                            label: Text(
+                              DateFormat('MMM d, yyyy').format(pickedDate),
+                            ),
+                            onPressed: () async {
+                              final d = await showDatePicker(
+                                context: context,
+                                initialDate: pickedDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2100),
+                              );
+                              if (d != null) {
+                                setDialogState(() => pickedDate = d);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.access_time, size: 18),
+                            label: Text(
+                              pickedTime == null
+                                  ? 'Time'
+                                  : pickedTime!.format(context),
+                            ),
+                            onPressed: () async {
+                              final t = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+                              if (t != null) {
+                                setDialogState(() => pickedTime = t);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: darkGreen,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (titleController.text.trim().isEmpty) return;
+                    Navigator.of(context).pop(true);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      await _repo.addEvent(
+        SchoolEvent(
+          id: '',
+          title: titleController.text.trim(),
+          description: descController.text.trim(),
+          date: pickedDate,
+          time: pickedTime?.format(context) ?? 'All Day',
+        ),
+      );
+      if (mounted) setState(() => _selectedDate = pickedDate);
+    }
+    titleController.dispose();
+    descController.dispose();
+  }
+
+  Future<void> _confirmDelete(SchoolEvent event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete event?'),
+        content: Text('"${event.title}" will be removed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _repo.deleteEvent(event.id);
+    }
   }
 
   Widget _buildMonthHeader() {
@@ -405,6 +513,18 @@ class _CalendarPageState extends State<CalendarPage> {
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
                                       color: darkGreen,
+                                    ),
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () => _confirmDelete(event),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.grey[500],
+                                      size: 20,
                                     ),
                                   ),
                                 ),
