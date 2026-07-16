@@ -1,5 +1,6 @@
 // lib/features/account/scripts/auth.dart
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
@@ -30,10 +31,20 @@ class AuthService {
     required String password,
   }) async {
     try {
-      return await _firebaseAuth.createUserWithEmailAndPassword(
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+      // Create the user's profile document so the account is a real record.
+      final user = credential.user;
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'email': email,
+          'displayName': email.split('@').first,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+      return credential;
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e));
     } catch (_) {
