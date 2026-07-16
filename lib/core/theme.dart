@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 /// Bundled modern typeface (see pubspec `fonts:`). Applied app-wide via the
@@ -169,7 +170,10 @@ class AppTheme {
         backgroundColor: Colors.white,
         selectedItemColor: AppColors.brandDark,
         unselectedItemColor: AppColors.textTertiary,
-        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+        selectedLabelStyle: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 11,
+        ),
         unselectedLabelStyle: TextStyle(fontSize: 11),
         type: BottomNavigationBarType.fixed,
         elevation: 8,
@@ -204,13 +208,9 @@ class AppTheme {
             fontWeight: FontWeight.w700,
             letterSpacing: -0.3,
           ),
-          titleMedium: base.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          titleMedium: base.titleMedium?.copyWith(fontWeight: FontWeight.w600),
           bodyMedium: base.bodyMedium?.copyWith(height: 1.4),
-          labelLarge: base.labelLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w600),
         )
         .apply(
           fontFamily: kFontFamily,
