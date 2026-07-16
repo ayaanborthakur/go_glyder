@@ -1,6 +1,7 @@
 // lib/features/account/scripts/auth.dart
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_glyder/services/firestore_service.dart';
 
 /// Thrown when an auth action fails, carrying a user-friendly message
 /// that the UI can show directly.
@@ -46,16 +47,27 @@ class AuthService {
     required String password,
   }) async {
     try {
-      return await _firebaseAuth.signInWithEmailAndPassword(
+      // FIX: Changed "createUserWithEmailAndPassword" to "signInWithEmailAndPassword"
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
+
+      // Create the corresponding Firestore profile doc for this user.
+      final uid = credential.user?.uid;
+      if (uid != null) {
+        await FirestoreService.instance.createUserProfile(
+          uid: uid,
+          email: email,
+        );
+      }
+      return credential;
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e));
     } catch (_) {
       throw AuthException('Something went wrong. Please try again.');
     }
-  }
+  } // Only one bracket here now!
 
   // SIGN OUT
   Future<void> signOut() async {
