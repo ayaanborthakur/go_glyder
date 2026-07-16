@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GoGlyder (debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/core/main.dart"
+    },
+    {
+      "name": "GoGlyder (profile)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/core/main.dart",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "GoGlyder (release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/core/main.dart",
+      "flutterMode": "release"
+    }
+  ]
+}

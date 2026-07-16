@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:go_glyder/features/account/scripts/auth.dart';
+
 Color darkGreen = const Color(0xFF023020);
 Color lightGreen = const Color(0xFF90EE90);
 
@@ -11,9 +13,40 @@ class Homepage extends StatefulWidget {
 }
 
 class _HomepageState extends State<Homepage> {
+  final AuthService _authService = AuthService();
+
   @override
   Widget build(BuildContext context) {
     return _buildHomePage();
+  }
+
+  Future<void> _confirmSignOut() async {
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text('Sign out?'),
+        content: const Text('You\'ll need to log back in to use GoGlyder.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSignOut ?? false) {
+      // The router's auth listener sends us back to /login automatically.
+      await _authService.signOut();
+    }
   }
 
   Widget _buildHomePage() {
@@ -78,16 +111,23 @@ class _HomepageState extends State<Homepage> {
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
                   borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.directions_car,
-                  color: Colors.white,
-                  size: 32,
+                  onTap: _confirmSignOut,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.logout,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
                 ),
               ),
             ],

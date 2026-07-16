@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/router.dart';
-
 Color darkGreen1 = const Color(0xFF023020);
 Color lightGreen1 = const Color(0xFF90EE90);
 
@@ -16,25 +14,22 @@ class MainScreen extends StatelessWidget {
     onItemTapped(int index) {
       switch (index) {
         case 0:
-          router.go('/');
+          context.go('/');
           break;
         case 1:
-          router.go('/calendar');
+          context.go('/calendar');
           break;
         case 2:
-          router.go('/analytics');
+          context.go('/analytics');
           break;
         case 3:
-          router.go('/messages');
+          context.go('/messages');
           break;
         case 4:
-          router.go('/search');
+          context.go('/search');
           break;
         case 5:
-          router.go('/community');
-          break;
-        case 6:
-          router.go('/login');
+          context.go('/community');
           break;
       }
     }
@@ -53,8 +48,6 @@ class MainScreen extends StatelessWidget {
           return 4;
         case '/community':
           return 5;
-        case '/login':
-          return 6;
 
         default:
           return 0;
@@ -81,7 +74,6 @@ class MainScreen extends StatelessWidget {
           ),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
           BottomNavigationBarItem(icon: Icon(Icons.group), label: 'Community'),
-          BottomNavigationBarItem(icon: Icon(Icons.login), label: 'Login'),
         ],
         currentIndex: calculateSelectedIndex(context),
         selectedItemColor: darkGreen1,

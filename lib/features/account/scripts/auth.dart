@@ -1,63 +1,88 @@
-// lib/services/auth.dart
+// lib/features/account/scripts/auth.dart
 
 import 'package:firebase_auth/firebase_auth.dart';
+
+/// Thrown when an auth action fails, carrying a user-friendly message
+/// that the UI can show directly.
+class AuthException implements Exception {
+  final String message;
+  AuthException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 class AuthService {
   // Get an instance of FirebaseAuth to use its features
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
 
-  // STREAM: Listens for changes in the user's authentication state (logged in or out)
-  // This is the most important part for automatically redirecting users.
+  // STREAM: Listens for changes in the user's authentication state (logged in or out).
+  // The router listens to this to decide whether to show the login screen.
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
   // GET CURRENT USER: A quick way to get the current user object if one exists.
   User? get currentUser => _firebaseAuth.currentUser;
 
   // SIGN UP with Email and Password
-  Future<UserCredential?> signUpWithEmailAndPassword({
+  Future<UserCredential> signUpWithEmailAndPassword({
     required String email,
     required String password,
   }) async {
     try {
-      // Use FirebaseAuth to create a new user
-      final UserCredential userCredential = await _firebaseAuth
-          .createUserWithEmailAndPassword(email: email, password: password);
-      return userCredential;
+      return await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
     } on FirebaseAuthException catch (e) {
-      // This catches specific Firebase errors (e.g., 'email-already-in-use')
-      // You can add more specific error handling here if you want.
-      print('Firebase Auth Exception during sign-up: ${e.message}');
-      return null;
-    } catch (e) {
-      // This catches any other unexpected errors.
-      print('An unexpected error occurred during sign-up: $e');
-      return null;
+      throw AuthException(_friendlyMessage(e));
+    } catch (_) {
+      throw AuthException('Something went wrong. Please try again.');
     }
   }
 
   // SIGN IN with Email and Password
-  Future<UserCredential?> signInWithEmailAndPassword({
+  Future<UserCredential> signInWithEmailAndPassword({
     required String email,
     required String password,
   }) async {
     try {
-      // Use FirebaseAuth to sign in an existing user
-      final UserCredential userCredential = await _firebaseAuth
-          .signInWithEmailAndPassword(email: email, password: password);
-      return userCredential;
+      return await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
     } on FirebaseAuthException catch (e) {
-      // Handles errors like 'user-not-found' or 'wrong-password'
-      print('Firebase Auth Exception during sign-in: ${e.message}');
-      return null;
-    } catch (e) {
-      print('An unexpected error occurred during sign-in: $e');
-      return null;
+      throw AuthException(_friendlyMessage(e));
+    } catch (_) {
+      throw AuthException('Something went wrong. Please try again.');
     }
   }
 
   // SIGN OUT
   Future<void> signOut() async {
-    // Simply call the signOut method from FirebaseAuth
     await _firebaseAuth.signOut();
+  }
+
+  // Maps raw Firebase error codes to messages a person can actually understand.
+  String _friendlyMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-email':
+        return 'That email address doesn\'t look right.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Incorrect email or password.';
+      case 'email-already-in-use':
+        return 'An account already exists for that email.';
+      case 'weak-password':
+        return 'Please use a stronger password (at least 6 characters).';
+      case 'network-request-failed':
+        return 'No internet connection. Please check and try again.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      default:
+        return e.message ?? 'Authentication failed. Please try again.';
+    }
   }
 }
