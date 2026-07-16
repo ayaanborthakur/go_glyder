@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_glyder/services/firestore_service.dart';
 
 class CommunityPage extends StatefulWidget {
   const CommunityPage({super.key});
@@ -11,59 +14,60 @@ class _CommunityPageState extends State<CommunityPage> {
   final Color darkGreen = const Color(0xFF023020);
   final Color lightGreen = const Color(0xFF90EE90);
 
-  final List<CarpoolGroup> _groups = [
-    CarpoolGroup(
-      name: 'Morning Commuters',
-      members: 8,
-      description: 'Parents carpooling for 8 AM drop-off',
-      icon: Icons.wb_sunny,
-    ),
-    CarpoolGroup(
-      name: 'After School Sports',
-      members: 12,
-      description: 'Carpool for sports practice pickup',
-      icon: Icons.sports_soccer,
-    ),
-    CarpoolGroup(
-      name: 'Friday Flexible',
-      members: 5,
-      description: 'Flexible Friday afternoon rides',
-      icon: Icons.schedule,
-    ),
-    CarpoolGroup(
-      name: 'Music & Arts Club',
-      members: 6,
-      description: 'Rides to music and art classes',
-      icon: Icons.music_note,
-    ),
-  ];
+  final FirestoreService _firestore = FirestoreService.instance;
+  final TextEditingController _newPostController = TextEditingController();
 
-  final List<CommunityPost> _posts = [
-    CommunityPost(
-      author: 'Sarah M.',
-      content:
-          'Looking for carpool partners for Tuesday and Thursday mornings. Drop-off at 7:45 AM. Anyone interested?',
-      timeAgo: '2h ago',
-      likes: 5,
-      comments: 3,
-    ),
-    CommunityPost(
-      author: 'Mike R.',
-      content:
-          'Great news! Our carpool group saved a total of 150 miles this month. Keep up the great work everyone! 🚗💚',
-      timeAgo: '5h ago',
-      likes: 12,
-      comments: 7,
-    ),
-    CommunityPost(
-      author: 'Lisa K.',
-      content:
-          'Reminder: Basketball practice is moved to 4:30 PM this Thursday. Adjusting pickup times accordingly.',
-      timeAgo: '1d ago',
-      likes: 8,
-      comments: 2,
-    ),
-  ];
+  @override
+  void dispose() {
+    _newPostController.dispose();
+    super.dispose();
+  }
+
+  String _timeAgo(DateTime? time) {
+    if (time == null) return 'just now';
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  Future<void> _createPost() async {
+    final content = _newPostController.text.trim();
+    if (content.isEmpty) return;
+    final author = FirebaseAuth.instance.currentUser?.email ?? 'Anonymous';
+    await _firestore.createCommunityPost(author: author, content: content);
+    _newPostController.clear();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _showNewPostDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Post'),
+        content: TextField(
+          controller: _newPostController,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: "What's on your mind?",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: _createPost,
+            style: ElevatedButton.styleFrom(backgroundColor: darkGreen),
+            child: const Text('Post', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,14 +99,7 @@ class _CommunityPageState extends State<CommunityPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Create post coming soon!'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        },
+        onPressed: _showNewPostDialog,
         backgroundColor: darkGreen,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('New Post', style: TextStyle(color: Colors.white)),
@@ -206,55 +203,91 @@ class _CommunityPageState extends State<CommunityPage> {
           const SizedBox(height: 12),
           SizedBox(
             height: 140,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _groups.length,
-              itemBuilder: (context, index) {
-                final group = _groups[index];
-                return Container(
-                  width: 160,
-                  margin: const EdgeInsets.only(right: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _firestore.streamCarpoolGroups(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Center(child: Text('Could not load groups'));
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No carpool groups yet',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data();
+                    final group = CarpoolGroup(
+                      name: data['name'] ?? '',
+                      members: data['members'] ?? 0,
+                      description: data['description'] ?? '',
+                      icon: _iconFor(data['icon'] as String?),
+                    );
+                    return GestureDetector(
+                      onTap: () => _firestore.joinCarpoolGroup(docs[index].id),
+                      child: Container(
+                        width: 160,
+                        margin: const EdgeInsets.only(right: 12),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: lightGreen.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.06),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        child: Icon(group.icon, color: darkGreen, size: 24),
-                      ),
-                      const Spacer(),
-                      Text(
-                        group.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: darkGreen,
-                          fontSize: 14,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: lightGreen.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                group.icon,
+                                color: darkGreen,
+                                size: 24,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              group.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: darkGreen,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${group.members} members',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${group.members} members',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -262,6 +295,19 @@ class _CommunityPageState extends State<CommunityPage> {
         ],
       ),
     );
+  }
+
+  IconData _iconFor(String? key) {
+    switch (key) {
+      case 'sports':
+        return Icons.sports_soccer;
+      case 'schedule':
+        return Icons.schedule;
+      case 'music':
+        return Icons.music_note;
+      default:
+        return Icons.wb_sunny;
+    }
   }
 
   Widget _buildCommunityFeed() {
@@ -279,14 +325,54 @@ class _CommunityPageState extends State<CommunityPage> {
             ),
           ),
           const SizedBox(height: 16),
-          ..._posts.map((post) => _buildPostCard(post)),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _firestore.streamCommunityPosts(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Could not load posts'),
+                );
+              }
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final docs = snapshot.data!.docs;
+              if (docs.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'No posts yet. Be the first to share!',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                );
+              }
+              return Column(
+                children: docs.map((doc) {
+                  final data = doc.data();
+                  final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+                  final post = CommunityPost(
+                    author: data['author'] ?? 'Anonymous',
+                    content: data['content'] ?? '',
+                    timeAgo: _timeAgo(createdAt),
+                    likes: data['likes'] ?? 0,
+                    comments: data['comments'] ?? 0,
+                  );
+                  return _buildPostCard(post, doc.id);
+                }).toList(),
+              );
+            },
+          ),
           const SizedBox(height: 80),
         ],
       ),
     );
   }
 
-  Widget _buildPostCard(CommunityPost post) {
+  Widget _buildPostCard(CommunityPost post, String postId) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -350,7 +436,14 @@ class _CommunityPageState extends State<CommunityPage> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Icon(Icons.favorite_border, color: Colors.grey[500], size: 20),
+              GestureDetector(
+                onTap: () => _firestore.likePost(postId),
+                child: Icon(
+                  Icons.favorite_border,
+                  color: Colors.grey[500],
+                  size: 20,
+                ),
+              ),
               const SizedBox(width: 4),
               Text(
                 '${post.likes}',

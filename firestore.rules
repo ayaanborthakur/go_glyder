@@ -3,25 +3,38 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // A user owns their profile document and everything under it
-    // (events, and future per-user data). Only the signed-in owner
-    // can read or write it.
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-      match /{subcollection=**} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+    // Each user's own profile + their private contacts/messages subcollection.
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+
+      match /contacts/{contactId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+
+        match /messages/{messageId} {
+          allow read, write: if isSignedIn() && request.auth.uid == userId;
+        }
       }
     }
 
-    // Shared community posts: any signed-in user can read; a user may
-    // create posts as themselves and edit/delete only their own.
-    match /posts/{postId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if request.auth != null
-                    && resource.data.authorId == request.auth.uid;
+    // Shared community content: any signed-in user can read/post.
+    match /communityPosts/{postId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+    }
+
+    match /carpoolGroups/{groupId} {
+      allow read: if isSignedIn();
+      allow update: if isSignedIn();
+    }
+
+    // Shared school calendar events.
+    match /calendarEvents/{eventId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn();
     }
   }
 }
