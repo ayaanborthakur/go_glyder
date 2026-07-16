@@ -12,7 +12,20 @@
           "package_name": "com.trydentlabs.goglyder.go_glyder"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "163214469630-em0fo86iinpr14v9itqlpvsppqii1rgu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.trydentlabs.goglyder.go_glyder",
+            "certificate_hash": "75818c028c0cb3386742b99ef53879a8237cc5f3"
+          }
+        },
+        {
+          "client_id": "163214469630-v7g1bmsgsjsrvf9j0npg98om8398vjo7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBUJH-w7afuUjVC_AH7DqiaBcsXO4zrjYg"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "163214469630-v7g1bmsgsjsrvf9j0npg98om8398vjo7.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "163214469630-g8p54vdnkjd3g7ofl0anmg63l13fl69u.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.trydentlabs.goglyder.goGlyder"
+              }
+            }
+          ]
         }
       }
     }
