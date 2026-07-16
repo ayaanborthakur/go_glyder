@@ -7,7 +7,8 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Each user's own profile + their private contacts/messages subcollection.
+    // Each user's own profile + private subcollections (contacts/messages,
+    // and the denormalized list of groups they've joined).
     match /users/{userId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
 
@@ -18,6 +19,10 @@ service cloud.firestore {
           allow read, write: if isSignedIn() && request.auth.uid == userId;
         }
       }
+
+      match /myGroups/{groupId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     // Shared community content: any signed-in user can read/post.
@@ -26,9 +31,19 @@ service cloud.firestore {
       allow create, update: if isSignedIn();
     }
 
+    // Carpool / community groups. Anyone signed in can look one up (needed to
+    // join by code) and update the member count; only the owner sets createdBy.
+    // A user manages only their own membership doc in the roster.
     match /carpoolGroups/{groupId} {
       allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.createdBy == request.auth.uid;
       allow update: if isSignedIn();
+
+      match /members/{memberId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == memberId;
+      }
     }
 
     // Shared school calendar events.

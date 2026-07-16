@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_glyder/services/firestore_service.dart';
+import 'package:go_glyder/features/community/presentation/group_detail_page.dart';
 
 class CommunityPage extends StatefulWidget {
   const CommunityPage({super.key});
@@ -93,7 +94,7 @@ class _CommunityPageState extends State<CommunityPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(),
-            _buildCarpoolGroups(),
+            _buildMyGroups(),
             _buildCommunityFeed(),
           ],
         ),
@@ -177,7 +178,7 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  Widget _buildCarpoolGroups() {
+  Widget _buildMyGroups() {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -187,53 +188,61 @@ class _CommunityPageState extends State<CommunityPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Carpool Groups',
+                'My Groups',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: darkGreen,
                 ),
               ),
-              TextButton(
-                onPressed: () {},
-                child: Text('See All', style: TextStyle(color: darkGreen)),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: _showJoinGroupDialog,
+                    icon: Icon(Icons.vpn_key_outlined, size: 18, color: darkGreen),
+                    label: Text('Join', style: TextStyle(color: darkGreen)),
+                  ),
+                  const SizedBox(width: 4),
+                  ElevatedButton.icon(
+                    onPressed: _showCreateGroupDialog,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Create'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: darkGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 140,
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _firestore.streamCarpoolGroups(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Center(child: Text('Could not load groups'));
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final docs = snapshot.data!.docs;
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No carpool groups yet',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  );
-                }
-                return ListView.builder(
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _firestore.streamMyGroups(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return _groupsNotice('Could not load your groups');
+              }
+              if (!snapshot.hasData) {
+                return const SizedBox(
+                  height: 120,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final docs = snapshot.data!.docs;
+              if (docs.isEmpty) return _emptyGroups();
+              return SizedBox(
+                height: 140,
+                child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: docs.length,
                   itemBuilder: (context, index) {
                     final data = docs[index].data();
-                    final group = CarpoolGroup(
-                      name: data['name'] ?? '',
-                      members: data['members'] ?? 0,
-                      description: data['description'] ?? '',
-                      icon: _iconFor(data['icon'] as String?),
-                    );
+                    final id = docs[index].id;
+                    final name = (data['name'] ?? '') as String;
                     return GestureDetector(
-                      onTap: () => _firestore.joinCarpoolGroup(docs[index].id),
+                      onTap: () => _openGroup(id, name),
                       child: Container(
                         width: 160,
                         margin: const EdgeInsets.only(right: 12),
@@ -259,25 +268,25 @@ class _CommunityPageState extends State<CommunityPage> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
-                                group.icon,
+                                _iconFor(data['icon'] as String?),
                                 color: darkGreen,
                                 size: 24,
                               ),
                             ),
                             const Spacer(),
                             Text(
-                              group.name,
+                              name,
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: darkGreen,
                                 fontSize: 14,
                               ),
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '${group.members} members',
+                              'Tap to view · invite',
                               style: TextStyle(
                                 color: Colors.grey[600],
                                 fontSize: 12,
@@ -288,9 +297,65 @@ class _CommunityPageState extends State<CommunityPage> {
                       ),
                     );
                   },
-                );
-              },
-            ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _groupsNotice(String text) {
+    return SizedBox(
+      height: 120,
+      child: Center(
+        child: Text(text, style: TextStyle(color: Colors.grey[600])),
+      ),
+    );
+  }
+
+  Widget _emptyGroups() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.groups_outlined, size: 40, color: darkGreen),
+          const SizedBox(height: 12),
+          Text(
+            'You haven\'t joined any groups yet',
+            style: TextStyle(fontWeight: FontWeight.bold, color: darkGreen),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Create a carpool group or join one with a code',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              OutlinedButton(
+                onPressed: _showJoinGroupDialog,
+                child: Text('Join with code', style: TextStyle(color: darkGreen)),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: _showCreateGroupDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: darkGreen,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Create group'),
+              ),
+            ],
           ),
         ],
       ),
@@ -308,6 +373,124 @@ class _CommunityPageState extends State<CommunityPage> {
       default:
         return Icons.wb_sunny;
     }
+  }
+
+  void _openGroup(String id, String name) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupDetailPage(groupId: id, groupName: name),
+      ),
+    );
+  }
+
+  Future<void> _showCreateGroupDialog() async {
+    final nameC = TextEditingController();
+    final descC = TextEditingController();
+    final create = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Group'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameC,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Group name'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descC,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(labelText: 'Description'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: darkGreen,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              if (nameC.text.trim().isEmpty) return;
+              Navigator.of(context).pop(true);
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+
+    if (create == true) {
+      final name = nameC.text.trim();
+      try {
+        final id = await _firestore.createGroup(
+          name: name,
+          description: descC.text.trim(),
+        );
+        if (mounted) _openGroup(id, name);
+      } on GroupException catch (e) {
+        _notify(e.message);
+      } catch (_) {
+        _notify('Could not create the group.');
+      }
+    }
+    nameC.dispose();
+    descC.dispose();
+  }
+
+  Future<void> _showJoinGroupDialog() async {
+    final codeC = TextEditingController();
+    final join = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Join a Group'),
+        content: TextField(
+          controller: codeC,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(
+            labelText: 'Join code',
+            hintText: 'e.g. K7P2QX',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: darkGreen,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+
+    if (join == true) {
+      try {
+        final name = await _firestore.joinGroupByCode(codeC.text);
+        _notify('Joined $name!');
+      } on GroupException catch (e) {
+        _notify(e.message);
+      } catch (_) {
+        _notify('Could not join the group.');
+      }
+    }
+    codeC.dispose();
+  }
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildCommunityFeed() {
@@ -468,20 +651,6 @@ class _CommunityPageState extends State<CommunityPage> {
       ),
     );
   }
-}
-
-class CarpoolGroup {
-  final String name;
-  final int members;
-  final String description;
-  final IconData icon;
-
-  CarpoolGroup({
-    required this.name,
-    required this.members,
-    required this.description,
-    required this.icon,
-  });
 }
 
 class CommunityPost {

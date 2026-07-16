@@ -4,8 +4,18 @@
 // should use this instead of talking to FirebaseFirestore.instance directly,
 // so collection names/paths only live in one spot.
 
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+/// Thrown by group actions with a user-friendly message.
+class GroupException implements Exception {
+  final String message;
+  GroupException(this.message);
+  @override
+  String toString() => message;
+}
 
 class FirestoreService {
   FirestoreService._internal();
@@ -69,8 +79,140 @@ class FirestoreService {
     return _posts.doc(postId).update({'likes': FieldValue.increment(1)});
   }
 
-  Future<void> joinCarpoolGroup(String groupId) {
-    return _groups.doc(groupId).update({'members': FieldValue.increment(1)});
+  // ---------------------------------------------------------------------
+  // Groups & membership (join via code / QR)
+  // ---------------------------------------------------------------------
+
+  // The user's own list of joined groups (denormalized for a fast read).
+  CollectionReference<Map<String, dynamic>> _myGroups(String uid) =>
+      _users.doc(uid).collection('myGroups');
+
+  // The roster of members inside a group.
+  CollectionReference<Map<String, dynamic>> _members(String groupId) =>
+      _groups.doc(groupId).collection('members');
+
+  /// Live list of the current user's groups (empty for a new account).
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamMyGroups() {
+    final uid = _uid;
+    if (uid == null) return const Stream.empty();
+    return _myGroups(uid).orderBy('joinedAt', descending: true).snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamGroupMembers(
+    String groupId,
+  ) {
+    return _members(groupId).orderBy('displayName').snapshots();
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> getGroup(String groupId) {
+    return _groups.doc(groupId).get();
+  }
+
+  /// Creates a group, generates a unique join code, and adds the creator as
+  /// the first member. Returns the new group's id.
+  Future<String> createGroup({
+    required String name,
+    required String description,
+    String icon = 'sun',
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+
+    final joinCode = await _uniqueJoinCode();
+    final groupRef = _groups.doc();
+    await groupRef.set({
+      'name': name,
+      'description': description,
+      'icon': icon,
+      'joinCode': joinCode,
+      'createdBy': uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      'members': 1,
+    });
+    await _writeMembership(groupRef.id, uid, name, icon);
+    return groupRef.id;
+  }
+
+  /// Finds the group with [code] and joins it. Returns the group's name.
+  /// Throws [GroupException] if there's no match or the user is already in it.
+  Future<String> joinGroupByCode(String code) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+
+    final normalized = code.trim().toUpperCase();
+    if (normalized.isEmpty) throw GroupException('Enter a join code.');
+
+    final query = await _groups
+        .where('joinCode', isEqualTo: normalized)
+        .limit(1)
+        .get();
+    if (query.docs.isEmpty) {
+      throw GroupException('No group found for code "$normalized".');
+    }
+
+    final groupDoc = query.docs.first;
+    final already = await _members(groupDoc.id).doc(uid).get();
+    if (already.exists) throw GroupException('You\'re already in this group.');
+
+    final data = groupDoc.data();
+    await _writeMembership(
+      groupDoc.id,
+      uid,
+      (data['name'] ?? '') as String,
+      (data['icon'] ?? 'sun') as String,
+    );
+    await _groups.doc(groupDoc.id).update({
+      'members': FieldValue.increment(1),
+    });
+    return (data['name'] ?? 'the group') as String;
+  }
+
+  Future<void> leaveGroup(String groupId) async {
+    final uid = _uid;
+    if (uid == null) return;
+    await _members(groupId).doc(uid).delete();
+    await _myGroups(uid).doc(groupId).delete();
+    await _groups.doc(groupId).update({'members': FieldValue.increment(-1)});
+  }
+
+  // Writes both the group's roster entry and the user's myGroups entry.
+  Future<void> _writeMembership(
+    String groupId,
+    String uid,
+    String name,
+    String icon,
+  ) async {
+    final me = FirebaseAuth.instance.currentUser;
+    final displayName =
+        me?.displayName ?? me?.email?.split('@').first ?? 'Member';
+    await _members(groupId).doc(uid).set({
+      'displayName': displayName,
+      'email': me?.email,
+      'joinedAt': FieldValue.serverTimestamp(),
+    });
+    await _myGroups(uid).doc(groupId).set({
+      'name': name,
+      'icon': icon,
+      'joinedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<String> _uniqueJoinCode() async {
+    for (var attempt = 0; attempt < 5; attempt++) {
+      final code = _randomCode();
+      final existing = await _groups
+          .where('joinCode', isEqualTo: code)
+          .limit(1)
+          .get();
+      if (existing.docs.isEmpty) return code;
+    }
+    return _randomCode();
+  }
+
+  String _randomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous 0/O/1/I
+    final rnd = Random.secure();
+    return List.generate(6, (_) => chars[rnd.nextInt(chars.length)]).join();
   }
 
   // ---------------------------------------------------------------------
