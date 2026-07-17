@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 import 'package:go_glyder/features/community/presentation/group_detail_page.dart';
+import 'package:go_glyder/features/community/presentation/qr_scan_page.dart';
 
 class CommunityPage extends StatefulWidget {
   const CommunityPage({super.key});
@@ -446,21 +447,36 @@ class _CommunityPageState extends State<CommunityPage> {
 
   Future<void> _showJoinGroupDialog() async {
     final codeC = TextEditingController();
-    final join = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Join a Group'),
-        content: TextField(
-          controller: codeC,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(
-            labelText: 'Join code',
-            hintText: 'e.g. K7P2QX',
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: codeC,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Join code',
+                hintText: 'e.g. K7P2QX',
+              ),
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).pop('scan'),
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Scan QR code instead'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: darkGreen,
+                minimumSize: const Size.fromHeight(44),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -468,14 +484,16 @@ class _CommunityPageState extends State<CommunityPage> {
               backgroundColor: darkGreen,
               foregroundColor: Colors.white,
             ),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(context).pop('code'),
             child: const Text('Join'),
           ),
         ],
       ),
     );
 
-    if (join == true) {
+    if (action == 'scan') {
+      await _scanToJoin();
+    } else if (action == 'code') {
       try {
         final name = await _firestore.joinGroupByCode(codeC.text);
         _notify('Joined $name!');
@@ -486,6 +504,13 @@ class _CommunityPageState extends State<CommunityPage> {
       }
     }
     codeC.dispose();
+  }
+
+  Future<void> _scanToJoin() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrScanPage()),
+    );
+    if (result != null) _notify(result);
   }
 
   void _notify(String message) {
