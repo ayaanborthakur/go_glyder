@@ -57,10 +57,15 @@ class GroupDetailPage extends StatelessWidget {
           final data = snap.data?.data() ?? const {};
           final joinCode = (data['joinCode'] ?? '——') as String;
           final description = (data['description'] ?? '') as String;
+          final schoolName = (data['schoolName'] ?? '') as String;
+          final pickupArea = (data['pickupArea'] ?? '') as String;
+          final members = (data['members'] ?? 0) as int;
 
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
+              _aboutCard(schoolName, pickupArea, members),
+              const SizedBox(height: 20),
               if (description.isNotEmpty) ...[
                 Text(
                   description,
@@ -94,6 +99,48 @@ class GroupDetailPage extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _aboutCard(String schoolName, String pickupArea, int members) {
+    Widget row(IconData icon, String value) => Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.brandGreen),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (schoolName.isNotEmpty) row(Icons.school_outlined, schoolName),
+          if (pickupArea.isNotEmpty) row(Icons.place_outlined, pickupArea),
+          row(
+            Icons.groups_outlined,
+            '$members member${members == 1 ? '' : 's'}',
+          ),
+        ],
       ),
     );
   }

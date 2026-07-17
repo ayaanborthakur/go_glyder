@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_glyder/services/firestore_service.dart';
+import 'package:go_glyder/features/community/presentation/create_group_page.dart';
 import 'package:go_glyder/features/community/presentation/group_detail_page.dart';
 import 'package:go_glyder/features/community/presentation/qr_scan_page.dart';
 
@@ -377,6 +378,10 @@ class _CommunityPageState extends State<CommunityPage> {
         return Icons.schedule;
       case 'music':
         return Icons.music_note;
+      case 'event':
+        return Icons.event;
+      case 'group':
+        return Icons.groups_rounded;
       default:
         return Icons.wb_sunny;
     }
@@ -391,64 +396,14 @@ class _CommunityPageState extends State<CommunityPage> {
   }
 
   Future<void> _showCreateGroupDialog() async {
-    final nameC = TextEditingController();
-    final descC = TextEditingController();
-    final create = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Group'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameC,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Group name'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descC,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Description'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: darkGreen,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              if (nameC.text.trim().isEmpty) return;
-              Navigator.of(context).pop(true);
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+    // Full-screen form (school name, category, area, etc.). Returns
+    // (groupId, name) on success, or null if the user backs out.
+    final result = await Navigator.of(context).push<(String, String)>(
+      MaterialPageRoute(builder: (_) => const CreateGroupPage()),
     );
-
-    if (create == true) {
-      final name = nameC.text.trim();
-      try {
-        final id = await _firestore.createGroup(
-          name: name,
-          description: descC.text.trim(),
-        );
-        if (mounted) _openGroup(id, name);
-      } on GroupException catch (e) {
-        _notify(e.message);
-      } catch (_) {
-        _notify('Could not create the group.');
-      }
+    if (result != null && mounted) {
+      _openGroup(result.$1, result.$2);
     }
-    nameC.dispose();
-    descC.dispose();
   }
 
   Future<void> _showJoinGroupDialog() async {

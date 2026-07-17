@@ -112,8 +112,11 @@ class FirestoreService {
   /// the first member. Returns the new group's id.
   Future<String> createGroup({
     required String name,
+    required String schoolName,
     required String description,
+    String category = 'general',
     String icon = 'sun',
+    String? pickupArea,
   }) async {
     final uid = _uid;
     if (uid == null) throw GroupException('You must be signed in.');
@@ -122,8 +125,11 @@ class FirestoreService {
     final groupRef = _groups.doc();
     await groupRef.set({
       'name': name,
+      'schoolName': schoolName,
       'description': description,
+      'category': category,
       'icon': icon,
+      'pickupArea': pickupArea ?? '',
       'joinCode': joinCode,
       'createdBy': uid,
       'createdAt': FieldValue.serverTimestamp(),
