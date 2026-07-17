@@ -212,6 +212,9 @@ class _CommunityPageState extends State<CommunityPage> {
                       backgroundColor: darkGreen,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 14),
+                      // Override the theme's full-width (infinite) minimumSize;
+                      // this button lives in a Row, which gives unbounded width.
+                      minimumSize: const Size(0, 44),
                     ),
                   ),
                 ],
@@ -353,6 +356,9 @@ class _CommunityPageState extends State<CommunityPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: darkGreen,
                   foregroundColor: Colors.white,
+                  // Bound the width — this button is inside a Row (the theme's
+                  // default minimumSize forces infinite width otherwise).
+                  minimumSize: const Size(0, 44),
                 ),
                 child: const Text('Create group'),
               ),
