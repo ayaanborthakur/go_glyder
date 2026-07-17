@@ -1,9 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/features/account/scripts/auth.dart';
+import 'package:go_glyder/services/firestore_service.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -205,71 +208,108 @@ class _HomepageState extends State<Homepage> {
   Widget _buildUpcomingSection() {
     return Padding(
       padding: AppSpacing.page,
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: AppColors.brandTint,
-          borderRadius: AppRadius.lgAll,
-          border: Border.all(color: AppColors.brandAccent.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.brandDark,
-                borderRadius: AppRadius.mdAll,
-              ),
-              child: const Icon(
-                Icons.event_available_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'NEXT SCHOOL EVENT',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'School Assembly',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Jan 20, 2026 · 9:00 AM',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirestoreService.instance.streamCalendarEvents(),
+        builder: (context, snapshot) {
+          // Events stream is ordered by date ascending, so the first one that
+          // isn't in the past is the next upcoming event.
+          Map<String, dynamic>? next;
+          if (snapshot.hasData) {
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            for (final doc in snapshot.data!.docs) {
+              final ts = doc.data()['date'] as Timestamp?;
+              if (ts == null) continue;
+              if (!ts.toDate().isBefore(today)) {
+                next = doc.data();
+                break;
+              }
+            }
+          }
+
+          final hasEvent = next != null;
+          final title = hasEvent ? (next['title'] ?? 'Untitled') as String : 'No upcoming events';
+          String subtitle = 'Add one from the calendar';
+          if (hasEvent) {
+            final ts = next['date'] as Timestamp?;
+            final dateStr = ts != null
+                ? DateFormat('MMM d, yyyy').format(ts.toDate())
+                : '';
+            final time = (next['time'] ?? '') as String;
+            subtitle = [dateStr, if (time.isNotEmpty) time].join(' · ');
+          }
+
+          return Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.brandTint,
+              borderRadius: AppRadius.lgAll,
+              border: Border.all(
+                color: AppColors.brandAccent.withValues(alpha: 0.25),
               ),
             ),
-            IconButton(
-              icon: const Icon(
-                Icons.arrow_forward_ios_rounded,
-                color: AppColors.brandDark,
-                size: 18,
-              ),
-              onPressed: () => context.go('/calendar'),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandDark,
+                    borderRadius: AppRadius.mdAll,
+                  ),
+                  child: Icon(
+                    hasEvent
+                        ? Icons.event_available_rounded
+                        : Icons.event_busy_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'NEXT SCHOOL EVENT',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: AppColors.brandDark,
+                    size: 18,
+                  ),
+                  onPressed: () => context.go('/calendar'),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
