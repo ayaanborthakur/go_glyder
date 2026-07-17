@@ -1,36 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
-
-class Message {
-  final String sender;
-  final String text;
-  final DateTime timestamp;
-  final bool isUser;
-
-  Message({
-    required this.sender,
-    required this.text,
-    required this.timestamp,
-    required this.isUser,
-  });
-}
-
-class Contact {
-  final String name;
-  final bool isAvailable;
-  final List<Message> messages;
-  String lastMessage;
-
-  Contact({
-    required this.name,
-    required this.isAvailable,
-    required this.messages,
-    required this.lastMessage,
-  });
-}
+import 'package:go_glyder/services/firestore_service.dart';
 
 /// Deterministic on-brand avatar gradient so each person keeps a stable color.
 LinearGradient avatarGradient(String name) {
@@ -53,56 +27,26 @@ LinearGradient avatarGradient(String name) {
 class Avatar extends StatelessWidget {
   final String name;
   final double size;
-  final bool showStatus;
-  final bool isOnline;
 
-  const Avatar({
-    super.key,
-    required this.name,
-    this.size = 52,
-    this.showStatus = false,
-    this.isOnline = false,
-  });
+  const Avatar({super.key, required this.name, this.size = 52});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: size,
       height: size,
-      child: Stack(
-        children: [
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              gradient: avatarGradient(name),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: size * 0.4,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          if (showStatus)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: size * 0.28,
-                height: size * 0.28,
-                decoration: BoxDecoration(
-                  color: isOnline ? AppColors.success : AppColors.textTertiary,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
-            ),
-        ],
+      decoration: BoxDecoration(
+        gradient: avatarGradient(name),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size * 0.4,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -116,111 +60,25 @@ class MessagesPage extends StatefulWidget {
 }
 
 class _MessagesPageState extends State<MessagesPage> {
-  late List<Contact> _contacts;
-  late List<Contact> _suggested;
+  final FirestoreService _firestore = FirestoreService.instance;
 
-  @override
-  void initState() {
-    super.initState();
-    _contacts = [
-      Contact(
-        name: 'John',
-        isAvailable: true,
-        lastMessage: 'Are you joining the carpool tomorrow?',
-        messages: [
-          Message(
-            sender: 'John',
-            text: 'Are you joining the carpool tomorrow?',
-            timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-            isUser: false,
-          ),
-        ],
-      ),
-      Contact(
-        name: 'Emma',
-        isAvailable: true,
-        lastMessage: 'See you tomorrow!',
-        messages: [
-          Message(
-            sender: 'Emma',
-            text: 'See you tomorrow!',
-            timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
-            isUser: false,
-          ),
-        ],
-      ),
-      Contact(
-        name: 'Mike',
-        isAvailable: true,
-        lastMessage: 'Can you pick me up at 8 AM?',
-        messages: [
-          Message(
-            sender: 'Mike',
-            text: 'Can you pick me up at 8 AM?',
-            timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-            isUser: false,
-          ),
-        ],
-      ),
-      Contact(
-        name: 'Sarah',
-        isAvailable: false,
-        lastMessage: 'Thanks for the ride last week!',
-        messages: [
-          Message(
-            sender: 'Sarah',
-            text: 'Thanks for the ride last week!',
-            timestamp: DateTime.now().subtract(const Duration(days: 1)),
-            isUser: false,
-          ),
-        ],
-      ),
-      Contact(
-        name: 'Alex',
-        isAvailable: false,
-        lastMessage: 'Running late, will be there soon',
-        messages: [
-          Message(
-            sender: 'Alex',
-            text: 'Running late, will be there soon',
-            timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-            isUser: false,
-          ),
-        ],
-      ),
-    ];
-
-    _suggested = [
-      Contact(name: 'David', isAvailable: true, lastMessage: '', messages: []),
-      Contact(name: 'Lisa', isAvailable: true, lastMessage: '', messages: []),
-      Contact(name: 'James', isAvailable: false, lastMessage: '', messages: []),
-      Contact(name: 'Priya', isAvailable: true, lastMessage: '', messages: []),
-    ];
-  }
-
-  void _openChat(Contact contact) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ChatDetailPage(contact: contact)),
+  Future<void> _startNewMessage() async {
+    final picked = await Navigator.of(context).push<_Member>(
+      MaterialPageRoute(builder: (_) => const NewMessagePage()),
     );
-  }
-
-  void _addSuggested(Contact c) {
-    setState(() {
-      _suggested.remove(c);
-      _contacts.insert(
-        0,
-        Contact(
-          name: c.name,
-          isAvailable: c.isAvailable,
-          lastMessage: 'Say hi to start the conversation',
-          messages: [],
+    if (picked != null && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              ChatDetailPage(otherUid: picked.uid, otherName: picked.name),
         ),
       );
-    });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final myUid = _firestore.currentUid;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -228,141 +86,122 @@ class _MessagesPageState extends State<MessagesPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_square, size: 22),
-            onPressed: () {},
+            onPressed: _startNewMessage,
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.only(top: 12, bottom: 24),
-        children: [
-          if (_suggested.isNotEmpty) _buildSuggested(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-            child: Text(
-              'Recent Chats',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-          ..._contacts.asMap().entries.map((e) {
-            return _ConversationTile(
-              contact: e.value,
-              onTap: () => _openChat(e.value),
-            ).animate(delay: (60 * e.key).ms).fadeIn(duration: 350.ms).slideX(
-              begin: 0.08,
-              end: 0,
-              curve: Curves.easeOut,
-            );
-          }),
-        ],
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _firestore.streamMyConversations(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const _CenterNote('Could not load conversations');
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final docs = snapshot.data!.docs.toList()
+            ..sort((a, b) {
+              final ta = a.data()['lastMessageAt'] as Timestamp?;
+              final tb = b.data()['lastMessageAt'] as Timestamp?;
+              return (tb?.millisecondsSinceEpoch ?? 0).compareTo(
+                ta?.millisecondsSinceEpoch ?? 0,
+              );
+            });
+
+          if (docs.isEmpty) return _emptyState();
+
+          return ListView.builder(
+            padding: const EdgeInsets.only(top: 12, bottom: 24),
+            itemCount: docs.length,
+            itemBuilder: (context, i) {
+              final data = docs[i].data();
+              final participants = List<String>.from(
+                data['participants'] ?? const [],
+              );
+              final names = Map<String, dynamic>.from(data['names'] ?? const {});
+              final otherUid = participants.firstWhere(
+                (p) => p != myUid,
+                orElse: () => '',
+              );
+              final otherName = (names[otherUid] ?? 'Member') as String;
+              final lastMessage = (data['lastMessage'] ?? '') as String;
+              final ts = data['lastMessageAt'] as Timestamp?;
+
+              return _ConversationTile(
+                name: otherName,
+                lastMessage: lastMessage.isEmpty
+                    ? 'Say hi to start the conversation'
+                    : lastMessage,
+                time: ts != null ? DateFormat.jm().format(ts.toDate()) : '',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ChatDetailPage(otherUid: otherUid, otherName: otherName),
+                  ),
+                ),
+              ).animate(delay: (50 * i).ms).fadeIn(duration: 300.ms).slideX(
+                begin: 0.08,
+                end: 0,
+                curve: Curves.easeOut,
+              );
+            },
+          );
+        },
       ),
     );
   }
 
-  Widget _buildSuggested() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-          child: Text(
-            'Suggested Riders',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: AppColors.textSecondary,
+  Widget _emptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 64,
+              color: AppColors.textTertiary,
             ),
-          ),
+            const SizedBox(height: 16),
+            const Text(
+              'No conversations yet',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Message a parent from one of your carpool groups to get started.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _startNewMessage,
+              icon: const Icon(Icons.edit_square, size: 18),
+              label: const Text('New message'),
+            ),
+          ],
         ),
-        SizedBox(
-          height: 140,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _suggested.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (context, i) {
-              final c = _suggested[i];
-              return Container(
-                width: 120,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: AppRadius.lgAll,
-                  boxShadow: kCardShadow,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Avatar(
-                      name: c.name,
-                      size: 48,
-                      showStatus: true,
-                      isOnline: c.isAvailable,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      c.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: () => _addSuggested(c),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.brandTint,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Add',
-                          style: TextStyle(
-                            color: AppColors.brandDark,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ).animate(delay: (80 * i).ms).fadeIn(duration: 350.ms).slideY(
-                begin: 0.2,
-                end: 0,
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-      ],
+      ),
     );
   }
 }
 
 class _ConversationTile extends StatelessWidget {
-  final Contact contact;
+  final String name;
+  final String lastMessage;
+  final String time;
   final VoidCallback onTap;
 
-  const _ConversationTile({required this.contact, required this.onTap});
+  const _ConversationTile({
+    required this.name,
+    required this.lastMessage,
+    required this.time,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final last = contact.messages.isNotEmpty
-        ? contact.messages.last
-        : null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -371,19 +210,14 @@ class _ConversationTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Row(
             children: [
-              Avatar(
-                name: contact.name,
-                size: 54,
-                showStatus: true,
-                isOnline: contact.isAvailable,
-              ),
+              Avatar(name: name, size: 54),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      contact.name,
+                      name,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -392,7 +226,7 @@ class _ConversationTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      contact.lastMessage,
+                      lastMessage,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -404,9 +238,9 @@ class _ConversationTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (last != null)
+              if (time.isNotEmpty)
                 Text(
-                  DateFormat.jm().format(last.timestamp),
+                  time,
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textTertiary,
@@ -420,15 +254,137 @@ class _ConversationTile extends StatelessWidget {
   }
 }
 
+/// A person the user can start a conversation with (a fellow group member).
+class _Member {
+  final String uid;
+  final String name;
+  const _Member(this.uid, this.name);
+}
+
+/// Pick someone to message — drawn from the members of the user's groups.
+class NewMessagePage extends StatelessWidget {
+  const NewMessagePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final firestore = FirestoreService.instance;
+    final myUid = firestore.currentUid;
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(title: const Text('New Message')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: firestore.streamMyGroups(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final groups = snapshot.data!.docs;
+          if (groups.isEmpty) {
+            return const _CenterNote(
+              'Join or create a carpool group first — you can message its '
+              'members here.',
+            );
+          }
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            children: groups.map((g) {
+              final groupName = (g.data()['name'] ?? 'Group') as String;
+              return _GroupMembersSection(
+                groupId: g.id,
+                groupName: groupName,
+                myUid: myUid,
+                onPick: (member) => Navigator.of(context).pop(member),
+              );
+            }).toList(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _GroupMembersSection extends StatelessWidget {
+  final String groupId;
+  final String groupName;
+  final String? myUid;
+  final ValueChanged<_Member> onPick;
+
+  const _GroupMembersSection({
+    required this.groupId,
+    required this.groupName,
+    required this.myUid,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+          child: Text(
+            groupName.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirestoreService.instance.streamGroupMembers(groupId),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const SizedBox.shrink();
+            final members = snapshot.data!.docs
+                .where((m) => m.id != myUid)
+                .toList();
+            if (members.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'No other members yet',
+                  style: TextStyle(color: AppColors.textTertiary),
+                ),
+              );
+            }
+            return Column(
+              children: members.map((m) {
+                final name = (m.data()['displayName'] ?? 'Member') as String;
+                return ListTile(
+                  leading: Avatar(name: name, size: 44),
+                  title: Text(
+                    name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  onTap: () => onPick(_Member(m.id, name)),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
 class ChatDetailPage extends StatefulWidget {
-  final Contact contact;
-  const ChatDetailPage({super.key, required this.contact});
+  final String otherUid;
+  final String otherName;
+  const ChatDetailPage({
+    super.key,
+    required this.otherUid,
+    required this.otherName,
+  });
 
   @override
   State<ChatDetailPage> createState() => _ChatDetailPageState();
 }
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
+  final FirestoreService _firestore = FirestoreService.instance;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -439,39 +395,16 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     super.dispose();
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    setState(() {
-      widget.contact.messages.add(
-        Message(
-          sender: 'You',
-          text: text,
-          timestamp: DateTime.now(),
-          isUser: true,
-        ),
-      );
-      widget.contact.lastMessage = text;
-    });
     _controller.clear();
+    await _firestore.sendDirectMessage(
+      otherUid: widget.otherUid,
+      otherName: widget.otherName,
+      text: text,
+    );
     _scrollToBottom();
-
-    Future.delayed(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
-      final reply = _reply(text);
-      setState(() {
-        widget.contact.messages.add(
-          Message(
-            sender: widget.contact.name,
-            text: reply,
-            timestamp: DateTime.now(),
-            isUser: false,
-          ),
-        );
-        widget.contact.lastMessage = reply;
-      });
-      _scrollToBottom();
-    });
   }
 
   void _scrollToBottom() {
@@ -486,59 +419,25 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     });
   }
 
-  String _reply(String msg) {
-    final m = msg.toLowerCase();
-    bool has(List<String> words) => words.any(m.contains);
-    if (has(['hi', 'hey', 'hello'])) return 'Hey! How are you doing?';
-    if (has(['join', 'coming', 'in?', 'you in'])) return 'Yeah, count me in!';
-    if (has(['time', 'when', 'tomorrow', 'today', 'morning'])) {
-      return 'What time works for you?';
-    }
-    if (has(['pick', 'where', 'location', 'address', 'meet'])) {
-      return 'Sure! Where should I pick you up?';
-    }
-    if (has(['thanks', 'thank', 'appreciate'])) return 'Anytime! Happy to help.';
-    return 'Sounds good! 👍';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final c = widget.contact;
+    final convId = _firestore.conversationIdFor(widget.otherUid);
+    final myUid = _firestore.currentUid;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         titleSpacing: 0,
         title: Row(
           children: [
-            Avatar(
-              name: c.name,
-              size: 38,
-              showStatus: true,
-              isOnline: c.isAvailable,
-            ),
+            Avatar(name: widget.otherName, size: 38),
             const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  c.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                Text(
-                  c.isAvailable ? 'Active now' : 'Offline',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: c.isAvailable
-                        ? AppColors.brandAccent
-                        : Colors.white70,
-                  ),
-                ),
-              ],
+            Text(
+              widget.otherName,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
           ],
         ),
@@ -546,14 +445,34 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       body: Column(
         children: [
           Expanded(
-            child: c.messages.isEmpty
-                ? _emptyState()
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: c.messages.length,
-                    itemBuilder: (context, i) => _bubble(c.messages[i]),
-                  ),
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _firestore.streamConversationMessages(convId),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final msgs = snapshot.data!.docs;
+                if (msgs.isEmpty) return _emptyState();
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _scrollToBottom(),
+                );
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: msgs.length,
+                  itemBuilder: (context, i) {
+                    final data = msgs[i].data();
+                    final isUser = data['senderId'] == myUid;
+                    final ts = data['timestamp'] as Timestamp?;
+                    return _bubble(
+                      (data['text'] ?? '') as String,
+                      isUser,
+                      ts?.toDate(),
+                    );
+                  },
+                );
+              },
+            ),
           ),
           _inputBar(),
         ],
@@ -566,10 +485,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Avatar(name: widget.contact.name, size: 72),
+          Avatar(name: widget.otherName, size: 72),
           const SizedBox(height: 16),
           Text(
-            widget.contact.name,
+            widget.otherName,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
@@ -582,8 +501,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     );
   }
 
-  Widget _bubble(Message m) {
-    final isUser = m.isUser;
+  Widget _bubble(String text, bool isUser, DateTime? time) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -611,7 +529,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              m.text,
+              text,
               style: TextStyle(
                 color: isUser ? Colors.white : AppColors.textPrimary,
                 fontSize: 15,
@@ -620,7 +538,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             ),
             const SizedBox(height: 3),
             Text(
-              DateFormat.jm().format(m.timestamp),
+              time != null ? DateFormat.jm().format(time) : 'now',
               style: TextStyle(
                 fontSize: 10.5,
                 color: isUser ? Colors.white70 : AppColors.textTertiary,
@@ -681,10 +599,33 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 ),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+              child: const Icon(
+                Icons.send_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CenterNote extends StatelessWidget {
+  final String text;
+  const _CenterNote(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 15),
+        ),
       ),
     );
   }
