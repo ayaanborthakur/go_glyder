@@ -489,6 +489,46 @@ class FirestoreService {
     await ref.update({'events': filtered});
   }
 
+  /// Toggles the current user's RSVP on one event. Each event map carries an
+  /// `rsvps` list of {uid, name, photoUrl}; this reads the events array,
+  /// flips the caller's entry on the target event, and writes it back in a
+  /// transaction. A plain group-doc update — no subcollection, no rules
+  /// change, and old events (no `rsvps` key) simply start empty.
+  Future<void> toggleEventRsvp({
+    required String schoolId,
+    required String groupId,
+    required String eventId,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+    final me = FirebaseAuth.instance.currentUser;
+    final name = me?.displayName ?? me?.email?.split('@').first ?? 'Member';
+    final ref = _groupsCol(schoolId).doc(groupId);
+
+    await db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final events = ((snap.data()?['events'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      final idx = events.indexWhere((e) => e['id'] == eventId);
+      if (idx == -1) return;
+
+      final rsvps = ((events[idx]['rsvps'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map((r) => Map<String, dynamic>.from(r))
+          .toList();
+      final mine = rsvps.indexWhere((r) => r['uid'] == uid);
+      if (mine >= 0) {
+        rsvps.removeAt(mine);
+      } else {
+        rsvps.add({'uid': uid, 'name': name, 'photoUrl': me?.photoURL});
+      }
+      events[idx]['rsvps'] = rsvps;
+      tx.update(ref, {'events': events});
+    });
+  }
+
   // ---------------------------------------------------------------------
   // Carpool trips + seat requests (posting & matching), scoped to a group.
   // ---------------------------------------------------------------------

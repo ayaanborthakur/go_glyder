@@ -329,29 +329,81 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
       if ((e['time'] ?? '').toString().isNotEmpty) e['time'],
       if ((e['location'] ?? '').toString().isNotEmpty) e['location'],
     ].join(' · ');
+    final eventId = (e['id'] ?? '') as String;
+    final rsvps = ((e['rsvps'] as List?) ?? const [])
+        .cast<Map<String, dynamic>>();
+    final myUid = _fs.currentUid;
+    final going = myUid != null && rsvps.any((r) => r['uid'] == myUid);
+    final rsvpNames =
+        rsvps.map((r) => (r['name'] ?? 'Member') as String).toList();
 
     return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
         border: last
             ? null
             : const Border(bottom: BorderSide(color: AppColors.divider)),
       ),
-      child: ListTile(
-        leading: const Icon(Icons.event_rounded, color: AppColors.brandGreen),
-        title: Text(
-          (e['title'] ?? 'Event') as String,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: sub.isEmpty ? null : Text(sub),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline_rounded, size: 20),
-          color: AppColors.textTertiary,
-          onPressed: () => _fs.removeGroupEvent(
-            widget.schoolId,
-            widget.groupId,
-            (e['id'] ?? '') as String,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.event_rounded, color: AppColors.brandGreen),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      (e['title'] ?? 'Event') as String,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    if (sub.isNotEmpty)
+                      Text(sub,
+                          style: const TextStyle(
+                              color: AppColors.textSecondary, fontSize: 13)),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                color: AppColors.textTertiary,
+                onPressed: () =>
+                    _fs.removeGroupEvent(widget.schoolId, widget.groupId, eventId),
+              ),
+            ],
           ),
-        ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _RsvpButton(
+                going: going,
+                onTap: () => _fs.toggleEventRsvp(
+                  schoolId: widget.schoolId,
+                  groupId: widget.groupId,
+                  eventId: eventId,
+                ),
+              ),
+              const SizedBox(width: 12),
+              if (rsvpNames.isNotEmpty) ...[
+                AvatarStack(names: rsvpNames, size: 26),
+                const SizedBox(width: 8),
+                Text(
+                  rsvpNames.length == 1
+                      ? '1 going'
+                      : '${rsvpNames.length} going',
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 12.5),
+                ),
+              ] else
+                const Text(
+                  'Be the first to RSVP',
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 12.5),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -629,5 +681,46 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     nameC.dispose();
     areaC.dispose();
     descC.dispose();
+  }
+}
+
+/// A pill toggle for an event RSVP — filled when the user is going.
+class _RsvpButton extends StatelessWidget {
+  final bool going;
+  final VoidCallback onTap;
+  const _RsvpButton({required this.going, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: going ? AppColors.brandGreen : AppColors.brandTint,
+      borderRadius: AppRadius.smAll,
+      child: InkWell(
+        borderRadius: AppRadius.smAll,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                going ? Icons.check_circle_rounded : Icons.add_rounded,
+                size: 17,
+                color: going ? Colors.white : AppColors.brandDark,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                going ? 'Going' : "I'm going",
+                style: TextStyle(
+                  color: going ? Colors.white : AppColors.brandDark,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
