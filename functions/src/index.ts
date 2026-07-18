@@ -1,10 +1,14 @@
 import * as functions from 'firebase-functions/v2';
-import * as admin from 'firebase-admin';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 
-admin.initializeApp();
+initializeApp();
 
-const db = admin.firestore();
-const messaging = admin.messaging();
+// firebase-admin v13+ removed the namespaced admin.firestore()/admin.messaging()
+// accessors — use the modular getters instead.
+const db = getFirestore();
+const messaging = getMessaging();
 
 /**
  * Trigger 1: onNewDirectMessage

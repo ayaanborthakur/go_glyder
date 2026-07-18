@@ -1,1 +1,59 @@
-{"firestore":{"rules":"firestore.rules"},"storage":{"rules":"storage.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"trydentlabs-goglyder","appId":"1:163214469630:android:f123785a4ad57d6e8178af","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"trydentlabs-goglyder","appId":"1:163214469630:ios:8f68c75acee270e28178af","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"macos":{"default":{"projectId":"goglyder","appId":"1:937075343139:ios:842b44a4d648ff47d01696","uploadDebugSymbols":false,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"trydentlabs-goglyder","configurations":{"android":"1:163214469630:android:f123785a4ad57d6e8178af","ios":"1:163214469630:ios:8f68c75acee270e28178af","web":"1:163214469630:web:08fe2ebc779f536a8178af"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "functions": {
+    "source": "functions",
+    "codebase": "default",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "*.local"
+    ],
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" run build"
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "trydentlabs-goglyder",
+          "appId": "1:163214469630:android:f123785a4ad57d6e8178af",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "trydentlabs-goglyder",
+          "appId": "1:163214469630:ios:8f68c75acee270e28178af",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "goglyder",
+          "appId": "1:937075343139:ios:842b44a4d648ff47d01696",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "trydentlabs-goglyder",
+          "configurations": {
+            "android": "1:163214469630:android:f123785a4ad57d6e8178af",
+            "ios": "1:163214469630:ios:8f68c75acee270e28178af",
+            "web": "1:163214469630:web:08fe2ebc779f536a8178af"
+          }
+        }
+      }
+    }
+  }
+}
