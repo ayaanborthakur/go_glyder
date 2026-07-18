@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -13,7 +14,7 @@ void main() async {
   await initializeFirebase();
   // google_sign_in v7 requires a one-time initialize before use.
   await GoogleSignIn.instance.initialize(
-    serverClientId: kGoogleServerClientId,
+    serverClientId: kIsWeb ? null : kGoogleServerClientId,
   );
 
   // Wire notification taps to the router, then start FCM. The token itself is
