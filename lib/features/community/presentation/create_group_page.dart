@@ -204,10 +204,11 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
             duration: const Duration(milliseconds: 160),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: selected ? AppColors.brandDark : Colors.white,
+              color: selected ? null : Colors.white,
+              gradient: selected ? groupCoverGradient(c.key) : null,
               borderRadius: AppRadius.smAll,
               border: Border.all(
-                color: selected ? AppColors.brandDark : AppColors.divider,
+                color: selected ? Colors.transparent : AppColors.divider,
               ),
             ),
             child: Row(
