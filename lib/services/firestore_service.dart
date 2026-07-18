@@ -318,6 +318,7 @@ class FirestoreService {
     await _members(schoolId, groupId).doc(uid).set({
       'displayName': displayName,
       'email': me?.email,
+      'photoUrl': me?.photoURL,
       'joinedAt': FieldValue.serverTimestamp(),
     });
     await _myGroups(uid).doc(groupId).set({
@@ -413,6 +414,7 @@ class FirestoreService {
     final ref = await _trips(schoolId, groupId).add({
       'driverId': uid,
       'driverName': driverName,
+      'driverPhotoUrl': me?.photoURL,
       'origin': origin,
       'destination': destination,
       'date': Timestamp.fromDate(date),
@@ -451,6 +453,7 @@ class FirestoreService {
     await _tripRequests(schoolId, groupId, tripId).doc(uid).set({
       'riderId': uid,
       'riderName': riderName,
+      'riderPhotoUrl': me?.photoURL,
       'status': 'pending',
       'requestedAt': FieldValue.serverTimestamp(),
     });

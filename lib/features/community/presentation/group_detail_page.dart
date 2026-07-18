@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/core/widgets.dart';
 import 'package:go_glyder/features/account/presentation/profile_page.dart';
 import 'package:go_glyder/features/community/presentation/group_trips_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
@@ -58,122 +59,94 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(widget.groupName)),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: _fs
-            .schools
-            .doc(widget.schoolId)
-            .collection('groups')
-            .doc(widget.groupId)
-            .snapshots(),
-        builder: (context, snap) {
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final data = snap.data?.data() ?? const {};
-          final description = (data['description'] ?? '') as String;
-          final pickupArea = (data['pickupArea'] ?? '') as String;
-          final members = (data['members'] ?? 0) as int;
-          final events = ((data['events'] as List?) ?? const [])
-              .cast<Map<String, dynamic>>();
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _fs
+          .schools
+          .doc(widget.schoolId)
+          .collection('groups')
+          .doc(widget.groupId)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(title: Text(widget.groupName)),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final data = snap.data?.data() ?? const {};
+        final category = (data['category'] ?? '') as String;
+        final description = (data['description'] ?? '') as String;
+        final pickupArea = (data['pickupArea'] ?? '') as String;
+        final members = (data['members'] ?? 0) as int;
+        final events = ((data['events'] as List?) ?? const [])
+            .cast<Map<String, dynamic>>();
 
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              _aboutCard(pickupArea, members),
-              const SizedBox(height: 14),
-              _ridesButton(),
-              if (description.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    height: 1.4,
-                    color: AppColors.textSecondary,
-                  ),
+        return DefaultTabController(
+          length: 4,
+          child: Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              title: Text(widget.groupName),
+              flexibleSpace: Container(
+                decoration: BoxDecoration(gradient: groupCoverGradient(category)),
+              ),
+              actions: [
+                IconButton(
+                  tooltip: 'Leave group',
+                  icon: const Icon(Icons.logout_rounded),
+                  onPressed: _leave,
                 ),
               ],
-              const SizedBox(height: 24),
-              _eventsSection(events),
-              const SizedBox(height: 24),
-              _membersSection(),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: _leave,
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text('Leave group'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.danger,
-                  minimumSize: const Size.fromHeight(50),
-                  side: BorderSide(
-                    color: AppColors.danger.withValues(alpha: 0.4),
-                  ),
-                  shape: RoundedRectangleBorder(borderRadius: AppRadius.mdAll),
-                ),
+              bottom: const TabBar(
+                indicatorColor: Colors.white,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                tabs: [
+                  Tab(text: 'Overview'),
+                  Tab(text: 'Rides'),
+                  Tab(text: 'Events'),
+                  Tab(text: 'Members'),
+                ],
               ),
-            ],
-          );
-        },
-      ),
+            ),
+            body: TabBarView(
+              children: [
+                _overviewTab(pickupArea, members, description),
+                _ridesTab(),
+                _eventsTab(events),
+                _membersTab(),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _ridesButton() {
-    return Material(
-      color: AppColors.brandDark,
-      borderRadius: AppRadius.lgAll,
-      child: InkWell(
-        borderRadius: AppRadius.lgAll,
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => GroupTripsPage(
-              schoolId: widget.schoolId,
-              groupId: widget.groupId,
-              groupName: widget.groupName,
-              schoolName: widget.schoolName,
+  // ---- Overview tab ----
+  Widget _overviewTab(String pickupArea, int members, String description) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        _aboutCard(pickupArea, members),
+        if (description.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const Text(
+            'About this group',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.4,
+              color: AppColors.textSecondary,
             ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.directions_car_filled_rounded,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Carpool rides',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Text(
-                      'Post a ride or request a seat',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                color: Colors.white,
-                size: 16,
-              ),
-            ],
-          ),
-        ),
-      ),
+        ],
+      ],
     );
   }
 
@@ -217,16 +190,74 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     );
   }
 
-  // ---- Group's own events (inline list) ----
-  Widget _eventsSection(List<Map<String, dynamic>> events) {
+  // ---- Rides tab ----
+  Widget _ridesTab() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 84,
+              height: 84,
+              decoration: const BoxDecoration(
+                color: AppColors.brandTint,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.directions_car_filled_rounded,
+                size: 38,
+                color: AppColors.brandDark,
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Carpool rides',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Post a ride you\'re driving, or request a seat on someone '
+              'else\'s.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => GroupTripsPage(
+                      schoolId: widget.schoolId,
+                      groupId: widget.groupId,
+                      groupName: widget.groupName,
+                      schoolName: widget.schoolName,
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: const Text('Open rides'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- Events tab ----
+  Widget _eventsTab(List<Map<String, dynamic>> events) {
     events.sort((a, b) {
       final da = (a['date'] as Timestamp?)?.toDate() ?? DateTime(2100);
       final dbb = (b['date'] as Timestamp?)?.toDate() ?? DateTime(2100);
       return da.compareTo(dbb);
     });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: const EdgeInsets.all(20),
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -410,9 +441,10 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     locC.dispose();
   }
 
-  Widget _membersSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  // ---- Members tab ----
+  Widget _membersTab() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
       children: [
         const Text(
           'Members',
@@ -441,6 +473,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                     _memberTile(
                       docs[i].id,
                       (docs[i].data()['displayName'] ?? 'Member') as String,
+                      docs[i].data()['photoUrl'] as String?,
                       last: i == docs.length - 1,
                     ),
                 ],
@@ -452,7 +485,12 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     );
   }
 
-  Widget _memberTile(String uid, String name, {required bool last}) {
+  Widget _memberTile(
+    String uid,
+    String name,
+    String? photoUrl, {
+    required bool last,
+  }) {
     return Container(
       decoration: BoxDecoration(
         border: last
@@ -465,16 +503,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
             builder: (_) => ProfilePage(uid: uid, fallbackName: name),
           ),
         ),
-        leading: CircleAvatar(
-          backgroundColor: AppColors.brandTint,
-          child: Text(
-            name.isNotEmpty ? name[0].toUpperCase() : '?',
-            style: const TextStyle(
-              color: AppColors.brandDark,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+        leading: Avatar(name: name, size: 44, photoUrl: photoUrl),
         title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
         trailing: const Icon(
           Icons.chevron_right_rounded,
