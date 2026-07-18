@@ -388,6 +388,77 @@ class FirestoreService {
     });
   }
 
+  // ---------------------------------------------------------------------
+  // Group roles — the creator is implicitly the owner/admin; additional
+  // admins can be granted via the `admins` array on the group doc. Admins
+  // can edit the group, manage events, and remove members.
+  // ---------------------------------------------------------------------
+
+  /// Whether the current user can administer [groupId] — i.e. they created it
+  /// or have been added to its `admins` array. Live.
+  Stream<bool> streamIsGroupAdmin(String schoolId, String groupId) {
+    final uid = _uid;
+    if (uid == null) return Stream.value(false);
+    return _groupsCol(schoolId).doc(groupId).snapshots().map((d) {
+      final data = d.data();
+      if (data == null) return false;
+      if (data['createdBy'] == uid) return true;
+      final admins = (data['admins'] as List?)?.cast<String>() ?? const [];
+      return admins.contains(uid);
+    });
+  }
+
+  /// Edits a group's editable fields. Only non-null values are written.
+  Future<void> updateGroup({
+    required String schoolId,
+    required String groupId,
+    String? name,
+    String? description,
+    String? pickupArea,
+    String? category,
+    String? icon,
+  }) async {
+    if (_uid == null) throw GroupException('You must be signed in.');
+    final data = <String, dynamic>{};
+    if (name != null) data['name'] = name;
+    if (description != null) data['description'] = description;
+    if (pickupArea != null) data['pickupArea'] = pickupArea;
+    if (category != null) data['category'] = category;
+    if (icon != null) data['icon'] = icon;
+    if (data.isEmpty) return;
+    await _groupsCol(schoolId).doc(groupId).update(data);
+  }
+
+  /// Grants/revokes admin on [memberUid] for a group.
+  Future<void> setGroupAdmin({
+    required String schoolId,
+    required String groupId,
+    required String memberUid,
+    required bool isAdmin,
+  }) async {
+    await _groupsCol(schoolId).doc(groupId).update({
+      'admins': isAdmin
+          ? FieldValue.arrayUnion([memberUid])
+          : FieldValue.arrayRemove([memberUid]),
+    });
+  }
+
+  /// Removes another member from a group (admin action). Deletes the group's
+  /// roster entry and decrements the counter. Note: the removed user's own
+  /// `myGroups` shortcut can only be cleared by that user (it lives under
+  /// their profile), so it may linger until they next open the group.
+  Future<void> removeMember({
+    required String schoolId,
+    required String groupId,
+    required String memberUid,
+  }) async {
+    await _members(schoolId, groupId).doc(memberUid).delete();
+    await _groupsCol(schoolId).doc(groupId).update({
+      'members': FieldValue.increment(-1),
+      'admins': FieldValue.arrayRemove([memberUid]),
+    });
+  }
+
   // Writes both the group's roster entry and the user's myGroups entry.
   Future<void> _writeMembership(
     String schoolId,

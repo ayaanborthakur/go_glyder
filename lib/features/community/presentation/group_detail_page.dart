@@ -79,6 +79,11 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         final description = (data['description'] ?? '') as String;
         final pickupArea = (data['pickupArea'] ?? '') as String;
         final members = (data['members'] ?? 0) as int;
+        final createdBy = (data['createdBy'] ?? '') as String;
+        final admins = (data['admins'] as List?)?.cast<String>() ?? const [];
+        final myUid = _fs.currentUid;
+        final isAdmin =
+            myUid != null && (myUid == createdBy || admins.contains(myUid));
         final events = ((data['events'] as List?) ?? const [])
             .cast<Map<String, dynamic>>();
 
@@ -92,6 +97,12 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 decoration: BoxDecoration(gradient: groupCoverGradient(category)),
               ),
               actions: [
+                if (isAdmin)
+                  IconButton(
+                    tooltip: 'Edit group',
+                    icon: const Icon(Icons.edit_rounded),
+                    onPressed: () => _editGroup(data),
+                  ),
                 IconButton(
                   tooltip: 'Leave group',
                   icon: const Icon(Icons.logout_rounded),
@@ -115,7 +126,11 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 _overviewTab(pickupArea, members, description),
                 _ridesTab(),
                 _eventsTab(events),
-                _membersTab(),
+                _membersTab(
+                  createdBy: createdBy,
+                  admins: admins,
+                  isAdmin: isAdmin,
+                ),
               ],
             ),
           ),
@@ -442,7 +457,11 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   }
 
   // ---- Members tab ----
-  Widget _membersTab() {
+  Widget _membersTab({
+    required String createdBy,
+    required List<String> admins,
+    required bool isAdmin,
+  }) {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -474,6 +493,10 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                       docs[i].id,
                       (docs[i].data()['displayName'] ?? 'Member') as String,
                       docs[i].data()['photoUrl'] as String?,
+                      isOwner: docs[i].id == createdBy,
+                      isMemberAdmin: docs[i].id == createdBy ||
+                          admins.contains(docs[i].id),
+                      viewerIsAdmin: isAdmin,
                       last: i == docs.length - 1,
                     ),
                 ],
@@ -489,8 +512,16 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     String uid,
     String name,
     String? photoUrl, {
+    required bool isOwner,
+    required bool isMemberAdmin,
+    required bool viewerIsAdmin,
     required bool last,
   }) {
+    final roleLabel = isOwner ? 'Owner' : (isMemberAdmin ? 'Admin' : null);
+    // Admins can manage everyone except the owner and themselves.
+    final canManage =
+        viewerIsAdmin && !isOwner && uid != _fs.currentUid;
+
     return Container(
       decoration: BoxDecoration(
         border: last
@@ -505,11 +536,148 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         ),
         leading: Avatar(name: name, size: 44, photoUrl: photoUrl),
         title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-        trailing: const Icon(
-          Icons.chevron_right_rounded,
-          color: AppColors.textTertiary,
-        ),
+        subtitle: roleLabel == null
+            ? null
+            : Text(
+                roleLabel,
+                style: const TextStyle(
+                  color: AppColors.brandGreen,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+        trailing: canManage
+            ? PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded,
+                    color: AppColors.textTertiary),
+                onSelected: (v) => _onMemberAction(v, uid, name, isMemberAdmin),
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'toggleAdmin',
+                    child: Text(isMemberAdmin ? 'Remove admin' : 'Make admin'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'remove',
+                    child: Text('Remove from group'),
+                  ),
+                ],
+              )
+            : const Icon(Icons.chevron_right_rounded,
+                color: AppColors.textTertiary),
       ),
     );
+  }
+
+  Future<void> _onMemberAction(
+    String action,
+    String uid,
+    String name,
+    bool isMemberAdmin,
+  ) async {
+    if (action == 'toggleAdmin') {
+      await _fs.setGroupAdmin(
+        schoolId: widget.schoolId,
+        groupId: widget.groupId,
+        memberUid: uid,
+        isAdmin: !isMemberAdmin,
+      );
+      return;
+    }
+    if (action == 'remove') {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Remove $name?'),
+          content: Text('$name will lose access to this group.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      if (ok == true) {
+        await _fs.removeMember(
+          schoolId: widget.schoolId,
+          groupId: widget.groupId,
+          memberUid: uid,
+        );
+      }
+    }
+  }
+
+  // ---- Edit group (admin) ----
+  Future<void> _editGroup(Map<String, dynamic> data) async {
+    final nameC = TextEditingController(text: (data['name'] ?? '') as String);
+    final areaC =
+        TextEditingController(text: (data['pickupArea'] ?? '') as String);
+    final descC =
+        TextEditingController(text: (data['description'] ?? '') as String);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit group'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameC,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: areaC,
+                textCapitalization: TextCapitalization.words,
+                decoration:
+                    const InputDecoration(labelText: 'Pickup area (optional)'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: descC,
+                textCapitalization: TextCapitalization.sentences,
+                maxLines: 3,
+                decoration:
+                    const InputDecoration(labelText: 'Description (optional)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameC.text.trim().isEmpty) return;
+              Navigator.of(context).pop(true);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      await _fs.updateGroup(
+        schoolId: widget.schoolId,
+        groupId: widget.groupId,
+        name: nameC.text.trim(),
+        pickupArea: areaC.text.trim(),
+        description: descC.text.trim(),
+      );
+    }
+    nameC.dispose();
+    areaC.dispose();
+    descC.dispose();
   }
 }
