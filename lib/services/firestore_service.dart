@@ -109,6 +109,17 @@ class FirestoreService {
     return _users.doc(uid).set({'role': role}, SetOptions(merge: true));
   }
 
+  /// Updates editable profile fields (display name, bio).
+  Future<void> updateUserProfile({String? displayName, String? bio}) {
+    final uid = _uid;
+    if (uid == null) return Future.value();
+    final data = <String, dynamic>{};
+    if (displayName != null) data['displayName'] = displayName;
+    if (bio != null) data['bio'] = bio;
+    if (data.isEmpty) return Future.value();
+    return _users.doc(uid).set(data, SetOptions(merge: true));
+  }
+
   // ---------------------------------------------------------------------
   // Community: carpool groups + feed posts
   // ---------------------------------------------------------------------
