@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "goglyder-web",
+      "runtimeExecutable": "/Users/virajrungta/src/flutter/bin/flutter",
+      "runtimeArgs": ["run", "-d", "web-server", "-t", "lib/core/main.dart", "--web-port", "8099"],
+      "port": 8099
+    }
+  ]
+}
