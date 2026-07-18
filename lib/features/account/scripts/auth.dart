@@ -38,31 +38,76 @@ class AuthService {
   /// dismissed the Google account picker (a cancel, not an error).
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      // google_sign_in v7: authenticate() shows the native account picker.
-      final GoogleSignInAccount account =
-          await GoogleSignIn.instance.authenticate();
+      if (kIsWeb) {
+        developer.log('Starting Google Sign-In on Web using signInWithPopup...', name: 'GoGlyder.Auth');
+        final GoogleAuthProvider authProvider = GoogleAuthProvider();
+        final UserCredential userCredential = await _firebaseAuth.signInWithPopup(authProvider);
+        developer.log('Web Google Sign-In successful. User: ${userCredential.user?.uid}', name: 'GoGlyder.Auth');
+        await _upsertUserDoc(userCredential.user);
+        return userCredential;
+      } else {
+        developer.log('Starting Google Sign-In on Mobile/Desktop...', name: 'GoGlyder.Auth');
+        // google_sign_in v7: authenticate() shows the native account picker.
+        final GoogleSignInAccount account =
+            await GoogleSignIn.instance.authenticate();
 
-      final idToken = account.authentication.idToken;
-      if (idToken == null) {
-        throw AuthException('Google sign-in failed. Please try again.');
+        developer.log('Google account retrieved: ${account.email}', name: 'GoGlyder.Auth');
+        final idToken = account.authentication.idToken;
+        if (idToken == null) {
+          developer.log('Google sign-in ID token is null', name: 'GoGlyder.Auth');
+          throw AuthException('Google sign-in failed. Please try again.');
+        }
+
+        final credential = GoogleAuthProvider.credential(idToken: idToken);
+        final userCredential = await _firebaseAuth.signInWithCredential(
+          credential,
+        );
+        developer.log('Firebase credential sign-in successful. User: ${userCredential.user?.uid}', name: 'GoGlyder.Auth');
+        await _upsertUserDoc(userCredential.user);
+        return userCredential;
       }
-
-      final credential = GoogleAuthProvider.credential(idToken: idToken);
-      final userCredential = await _firebaseAuth.signInWithCredential(
-        credential,
+    } on GoogleSignInException catch (e, stack) {
+      developer.log(
+        'GoogleSignInException during sign-in',
+        name: 'GoGlyder.Auth',
+        error: e,
+        stackTrace: stack,
       );
-      await _upsertUserDoc(userCredential.user);
-      return userCredential;
-    } on GoogleSignInException catch (e) {
       // User backed out of the picker — not a real error.
-      if (e.code == GoogleSignInExceptionCode.canceled) return null;
-      throw AuthException('Google sign-in failed. Please try again.');
-    } on FirebaseAuthException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        developer.log('Google sign-in cancelled by user', name: 'GoGlyder.Auth');
+        return null;
+      }
+      throw AuthException('Google sign-in failed: ${e.code}. Please try again.');
+    } on FirebaseAuthException catch (e, stack) {
+      developer.log(
+        'FirebaseAuthException during sign-in: ${e.code} - ${e.message}',
+        name: 'GoGlyder.Auth',
+        error: e,
+        stackTrace: stack,
+      );
+      const cancelCodes = {
+        'web-context-canceled',
+        'web-context-cancelled',
+        'canceled',
+        'user-cancelled',
+        'popup-closed-by-user',
+      };
+      if (cancelCodes.contains(e.code)) {
+        developer.log('Google sign-in cancelled by user (Firebase code: ${e.code})', name: 'GoGlyder.Auth');
+        return null;
+      }
       throw AuthException(e.message ?? 'Sign-in failed. Please try again.');
     } on AuthException {
       rethrow;
-    } catch (_) {
-      throw AuthException('Something went wrong. Please try again.');
+    } catch (e, stack) {
+      developer.log(
+        'Unexpected error during Google sign-in',
+        name: 'GoGlyder.Auth',
+        error: e,
+        stackTrace: stack,
+      );
+      throw AuthException('Something went wrong: $e. Please try again.');
     }
   }
 
@@ -127,15 +172,36 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    // Stop pushes to this device and tear down the messaging stream before the
-    // auth session goes away.
-    final uid = _firebaseAuth.currentUser?.uid;
-    if (uid != null) {
-      await NotificationService.instance.clearTokenForUser(uid);
-    }
-    MessagesController.instance.unsubscribeFromConversations();
+    try {
+      // Stop pushes to this device and tear down the messaging stream before the
+      // auth session goes away.
+      final uid = _firebaseAuth.currentUser?.uid;
+      if (uid != null) {
+        await NotificationService.instance.clearTokenForUser(uid);
+      }
+      MessagesController.instance.unsubscribeFromConversations();
 
-    await GoogleSignIn.instance.signOut();
-    await _firebaseAuth.signOut();
+      if (!kIsWeb) {
+        developer.log('Signing out of Google on Mobile/Desktop...', name: 'GoGlyder.Auth');
+        await GoogleSignIn.instance.signOut();
+      } else {
+        developer.log('Skipping GoogleSignIn.signOut() on Web...', name: 'GoGlyder.Auth');
+      }
+
+      developer.log('Signing out of FirebaseAuth...', name: 'GoGlyder.Auth');
+      await _firebaseAuth.signOut();
+      developer.log('Sign-out complete.', name: 'GoGlyder.Auth');
+    } catch (e, stack) {
+      developer.log(
+        'Error during sign-out',
+        name: 'GoGlyder.Auth',
+        error: e,
+        stackTrace: stack,
+      );
+      // Even if an error happens, still attempt to sign out from Firebase
+      try {
+        await _firebaseAuth.signOut();
+      } catch (_) {}
+    }
   }
 }
