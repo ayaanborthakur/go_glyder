@@ -16,7 +16,6 @@ export './account/presentation/profile_page.dart';
 export './account/scripts/auth.dart';
 export './admin/presentation/admin_calendar_page.dart';
 export './admin/presentation/admin_dashboard_page.dart';
-export './analytics/presentation/analytics.dart';
 export './calendar/presentation/calendar.dart';
 export './community/presentation/community.dart';
 export './community/presentation/community_feed_page.dart';

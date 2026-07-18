@@ -17,15 +17,12 @@ class MainScreen extends StatelessWidget {
           context.go('/calendar');
           break;
         case 2:
-          context.go('/analytics');
-          break;
-        case 3:
           context.go('/messages');
           break;
-        case 4:
+        case 3:
           context.go('/search');
           break;
-        case 5:
+        case 4:
           context.go('/community');
           break;
       }
@@ -37,14 +34,12 @@ class MainScreen extends StatelessWidget {
           return 0;
         case '/calendar':
           return 1;
-        case '/analytics':
-          return 2;
         case '/messages':
-          return 3;
+          return 2;
         case '/search':
-          return 4;
+          return 3;
         case '/community':
-          return 5;
+          return 4;
 
         default:
           return 0;
@@ -69,11 +64,6 @@ class MainScreen extends StatelessWidget {
               icon: Icon(Icons.calendar_today_outlined),
               activeIcon: Icon(Icons.calendar_month_rounded),
               label: 'Calendar',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.insights_outlined),
-              activeIcon: Icon(Icons.insights_rounded),
-              label: 'Analytics',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.chat_bubble_outline_rounded),

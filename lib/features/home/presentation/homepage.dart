@@ -102,6 +102,11 @@ class _HomepageState extends State<Homepage> {
                 .fadeIn(duration: 450.ms)
                 .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.xl),
+            _buildCarbonSection()
+                .animate(delay: 300.ms)
+                .fadeIn(duration: 450.ms)
+                .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
+            const SizedBox(height: AppSpacing.xl),
             _buildFeaturesGrid()
                 .animate(delay: 360.ms)
                 .fadeIn(duration: 450.ms)
@@ -342,6 +347,60 @@ class _HomepageState extends State<Homepage> {
     );
   }
 
+  Widget _buildCarbonSection() {
+    return Padding(
+      padding: AppSpacing.page,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Carbon Impact'),
+          const SizedBox(height: 14),
+          _buildCarbonComingSoon(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCarbonComingSoon() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: AppColors.brandTint,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.eco_rounded,
+              color: AppColors.brandDark,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'CO₂ savings coming soon',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Once families start logging carpool trips, this shows the miles '
+            'shared and CO₂ kept out of the air by your school community.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFeaturesGrid() {
     final features = [
       (
@@ -349,12 +408,6 @@ class _HomepageState extends State<Homepage> {
         'Calendar',
         'School events & trips',
         '/calendar',
-      ),
-      (
-        Icons.insights_rounded,
-        'Analytics',
-        'Impact & savings',
-        '/analytics',
       ),
       (
         Icons.map_rounded,

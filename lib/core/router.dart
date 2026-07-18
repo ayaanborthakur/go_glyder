@@ -54,10 +54,6 @@ final router = GoRouter(
       builder: (context, state) => MainScreen(child: SearchPage()),
     ),
     GoRoute(
-      path: '/analytics',
-      builder: (context, state) => MainScreen(child: AnalyticsPage()),
-    ),
-    GoRoute(
       path: '/community',
       builder: (context, state) => MainScreen(child: CommunityPage()),
     ),
