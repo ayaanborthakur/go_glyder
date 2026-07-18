@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/core/widgets.dart';
 import 'package:go_glyder/features/community/presentation/post_ride_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_glyder/services/firestore_service.dart';
@@ -61,6 +63,10 @@ class GroupTripsPage extends StatelessWidget {
               groupId: groupId,
               tripId: trips[i].id,
               data: trips[i].data(),
+            ).animate(delay: (40 * i).ms).fadeIn(duration: 280.ms).slideY(
+              begin: 0.06,
+              end: 0,
+              curve: Curves.easeOut,
             ),
           );
         },
@@ -135,18 +141,10 @@ class _TripCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.brandTint,
-                child: Text(
-                  (data['driverName'] as String?)?.isNotEmpty == true
-                      ? (data['driverName'] as String)[0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(
-                    color: AppColors.brandDark,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+              Avatar(
+                name: (data['driverName'] as String?) ?? 'Driver',
+                size: 36,
+                photoUrl: data['driverPhotoUrl'] as String?,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -358,17 +356,10 @@ class _RequestsSheet extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: AppColors.brandTint,
-                          child: Text(
-                            (d['riderName'] as String?)?.isNotEmpty == true
-                                ? (d['riderName'] as String)[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                                color: AppColors.brandDark,
-                                fontWeight: FontWeight.w700),
-                          ),
+                        Avatar(
+                          name: (d['riderName'] as String?) ?? 'Rider',
+                          size: 36,
+                          photoUrl: d['riderPhotoUrl'] as String?,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
