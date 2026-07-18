@@ -81,7 +81,13 @@ class ProfilePage extends StatelessWidget {
                 _infoRow(Icons.mail_outline_rounded, email),
               ],
               if (_isMe) ...[
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
+                TextButton.icon(
+                  onPressed: () => FirestoreService.instance.setUserRole(''),
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  label: const Text('Change role'),
+                ),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () => AuthService().signOut(),
                   icon: const Icon(Icons.logout_rounded),

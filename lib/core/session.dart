@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 class Session extends ChangeNotifier {
   User? _user;
   String? _role;
+  String? _adminSchoolId;
   bool _profileLoaded = false;
 
   StreamSubscription<User?>? _authSub;
@@ -24,6 +25,7 @@ class Session extends ChangeNotifier {
 
   User? get user => _user;
   String? get role => _role;
+  String? get adminSchoolId => _adminSchoolId;
   bool get isLoggedIn => _user != null;
 
   /// True until we've read the signed-in user's profile doc at least once.
@@ -37,6 +39,7 @@ class Session extends ChangeNotifier {
     _user = user;
     _profileSub?.cancel();
     _role = null;
+    _adminSchoolId = null;
     _profileLoaded = false;
     notifyListeners();
 
@@ -49,6 +52,7 @@ class Session extends ChangeNotifier {
         .listen(
           (doc) {
             _role = doc.data()?['role'] as String?;
+            _adminSchoolId = doc.data()?['adminSchoolId'] as String?;
             _profileLoaded = true;
             notifyListeners();
           },

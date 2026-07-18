@@ -31,6 +31,59 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> get _users =>
       _db.collection('users');
 
+  // ---------------------------------------------------------------------
+  // Schools & admin verification (anti-fake)
+  // ---------------------------------------------------------------------
+  CollectionReference<Map<String, dynamic>> get _schools =>
+      _db.collection('schools');
+
+  /// Public list of schools (name only) — used when claiming admin.
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamSchools() =>
+      _schools.orderBy('name').snapshots();
+
+  Future<Map<String, dynamic>?> getSchool(String schoolId) async =>
+      (await _schools.doc(schoolId).get()).data();
+
+  /// Whether the current user is a verified admin of [schoolId]. This reads
+  /// the `admins` roster — the real gate — not the profile's `role` field.
+  Stream<bool> streamIsSchoolAdmin(String schoolId) {
+    final uid = _uid;
+    if (uid == null) return Stream.value(false);
+    return _schools
+        .doc(schoolId)
+        .collection('admins')
+        .doc(uid)
+        .snapshots()
+        .map((d) => d.exists);
+  }
+
+  /// Claim admin of a school with its secret code. The roster write only
+  /// succeeds if the security rules verify the code server-side against the
+  /// school's private config, so a wrong code is rejected.
+  Future<void> claimSchoolAdmin({
+    required String schoolId,
+    required String code,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+    try {
+      await _schools.doc(schoolId).collection('admins').doc(uid).set({
+        'code': code.trim().toUpperCase(),
+        'grantedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        throw GroupException("That admin code isn't valid for this school.");
+      }
+      rethrow;
+    }
+    // Convenience flags on the profile (display only — the roster is the gate).
+    await _users.doc(uid).set({
+      'role': 'admin',
+      'adminSchoolId': schoolId,
+    }, SetOptions(merge: true));
+  }
+
   Future<void> createUserProfile({required String uid, required String email}) {
     return _users.doc(uid).set({
       'email': email,

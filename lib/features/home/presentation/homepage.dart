@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:go_glyder/core/session.dart';
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/features/account/presentation/profile_page.dart';
+import 'package:go_glyder/features/admin/presentation/admin_dashboard_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
 class Homepage extends StatefulWidget {
@@ -25,6 +26,51 @@ class _HomepageState extends State<Homepage> {
     );
   }
 
+  Widget _buildAdminCard() {
+    return Padding(
+      padding: AppSpacing.page,
+      child: Material(
+        color: AppColors.brandDark,
+        borderRadius: AppRadius.lgAll,
+        child: InkWell(
+          borderRadius: AppRadius.lgAll,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  AdminDashboardPage(schoolId: session.adminSchoolId!),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_rounded, color: Colors.white),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Admin dashboard',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16)),
+                      Text('Manage your school community',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded,
+                    color: Colors.white, size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -38,6 +84,13 @@ class _HomepageState extends State<Homepage> {
               end: 0,
               curve: Curves.easeOut,
             ),
+            if (session.role == 'admin' && session.adminSchoolId != null) ...[
+              const SizedBox(height: AppSpacing.xl),
+              _buildAdminCard()
+                  .animate(delay: 80.ms)
+                  .fadeIn(duration: 450.ms)
+                  .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
+            ],
             const SizedBox(height: AppSpacing.xl),
             _buildQuickActions()
                 .animate(delay: 120.ms)

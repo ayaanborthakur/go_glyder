@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/features/account/presentation/admin_claim_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
 /// Brief splash shown while the signed-in user's profile/role loads.
@@ -54,6 +55,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Future<void> _continue() async {
     if (_selected == null || _saving) return;
+
+    // Admin can't be self-granted — it needs school + code verification.
+    if (_selected == 'admin') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AdminClaimPage()),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       await FirestoreService.instance.setUserRole(_selected!);

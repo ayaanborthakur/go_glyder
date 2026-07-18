@@ -32,6 +32,34 @@ service cloud.firestore {
       }
     }
 
+    // Schools. The school doc (name) is public to signed-in users, but the
+    // school itself and its secret admin code are created only by the
+    // GoGlyder operator (console/CLI) — never by app clients.
+    match /schools/{schoolId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+
+      // Secret config (the admin code). No client can read or write it, but
+      // security-rule get() below still reads it server-side to verify.
+      match /private/{doc} {
+        allow read, write: if false;
+      }
+
+      // Verified admin roster. You can only add YOURSELF, and only if the
+      // code you submit matches the school's private admin code. This is what
+      // makes admin un-fakeable — setting role:"admin" on your own profile
+      // does nothing; the app checks membership here.
+      match /admins/{adminUid} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.auth.uid == adminUid
+          && request.resource.data.code ==
+             get(/databases/$(database)/documents/schools/$(schoolId)/private/config)
+               .data.adminCode;
+        allow delete: if isSignedIn() && request.auth.uid == adminUid;
+      }
+    }
+
     // Shared community content: any signed-in user can read/post.
     match /communityPosts/{postId} {
       allow read: if isSignedIn();
