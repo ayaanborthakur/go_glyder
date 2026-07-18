@@ -471,6 +471,68 @@ class FirestoreService {
     });
   }
 
+  // ---- Group stream (Classroom-style posts) ----
+  //
+  // A short feed of member posts lives as an inline `stream` array on the
+  // group doc — the same open-update model as `events`, so there's no new
+  // subcollection and no security-rule change. Capped to the most recent
+  // [_streamCap] posts so the group document stays small.
+  static const int _streamCap = 50;
+
+  /// Adds one post to the group's stream. serverTimestamp() isn't allowed
+  /// inside an array, so each post carries a client `at` Timestamp.
+  Future<void> postToGroupStream({
+    required String schoolId,
+    required String groupId,
+    required String text,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) throw GroupException('Message cannot be empty.');
+    final me = FirebaseAuth.instance.currentUser;
+    final name = me?.displayName ?? me?.email?.split('@').first ?? 'Member';
+    final ref = _groupsCol(schoolId).doc(groupId);
+
+    await db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final posts = ((snap.data()?['stream'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map((p) => Map<String, dynamic>.from(p))
+          .toList();
+      posts.add({
+        'id': _groupsCol(schoolId).doc().id,
+        'uid': uid,
+        'name': name,
+        'photoUrl': me?.photoURL,
+        'at': Timestamp.now(),
+        'text': trimmed,
+      });
+      // Keep only the most recent _streamCap posts.
+      if (posts.length > _streamCap) {
+        posts.removeRange(0, posts.length - _streamCap);
+      }
+      tx.update(ref, {'stream': posts});
+    });
+  }
+
+  /// Removes one stream post by id (author or group admin). Mirrors the
+  /// read-filter-write approach used for events.
+  Future<void> removeGroupStreamPost({
+    required String schoolId,
+    required String groupId,
+    required String postId,
+  }) async {
+    final ref = _groupsCol(schoolId).doc(groupId);
+    final doc = await ref.get();
+    final posts = (doc.data()?['stream'] as List?) ?? const [];
+    final filtered = posts
+        .cast<Map<String, dynamic>>()
+        .where((p) => p['id'] != postId)
+        .toList();
+    await ref.update({'stream': filtered});
+  }
+
   /// Removes one event by id. Firestore's arrayRemove needs an exact map
   /// match, so this reads the current array, filters client-side, and
   /// writes the whole (small) array back.
