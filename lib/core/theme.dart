@@ -74,6 +74,26 @@ const List<BoxShadow> kCardShadow = [
   ),
 ];
 
+/// A cover gradient per group category — gives each group card/header a
+/// distinct visual identity instead of a plain icon on a flat background.
+/// Falls back to the brand green for an unrecognized/empty category key.
+LinearGradient groupCoverGradient(String? category) {
+  const gradients = {
+    'morning': [Color(0xFFB45309), Color(0xFFFBBF24)], // sunrise amber
+    'afterschool': [Color(0xFF0E7490), Color(0xFF22D3EE)], // afternoon teal
+    'sports': [Color(0xFF1D4ED8), Color(0xFF60A5FA)], // energetic blue
+    'music': [Color(0xFF6D28D9), Color(0xFFC084FC)], // creative violet
+    'events': [Color(0xFF9D174D), Color(0xFFF472B6)], // festive pink
+    'general': [Color(0xFF0A5C36), Color(0xFF2FBF71)], // brand green
+  };
+  final colors = gradients[category] ?? gradients['general']!;
+  return LinearGradient(
+    colors: colors,
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+}
+
 class AppTheme {
   AppTheme._();
 

@@ -4,54 +4,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/core/widgets.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 import 'package:go_glyder/features/messages/logic/messages_logic.dart';
-
-/// Deterministic on-brand avatar gradient so each person keeps a stable color.
-LinearGradient avatarGradient(String name) {
-  const palettes = [
-    [Color(0xFF0A5C36), Color(0xFF2FBF71)],
-    [Color(0xFF0E7490), Color(0xFF22D3EE)],
-    [Color(0xFF4338CA), Color(0xFF818CF8)],
-    [Color(0xFFB45309), Color(0xFFFBBF24)],
-    [Color(0xFF9D174D), Color(0xFFF472B6)],
-    [Color(0xFF115E59), Color(0xFF2DD4BF)],
-  ];
-  final colors = palettes[name.hashCode.abs() % palettes.length];
-  return LinearGradient(
-    colors: colors,
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-}
-
-class Avatar extends StatelessWidget {
-  final String name;
-  final double size;
-
-  const Avatar({super.key, required this.name, this.size = 52});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: avatarGradient(name),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: size * 0.4,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
 
 class MessagesPage extends StatefulWidget {
   const MessagesPage({super.key});
