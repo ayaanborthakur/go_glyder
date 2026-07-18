@@ -4,8 +4,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'package:go_glyder/core/session.dart';
 import 'package:go_glyder/core/theme.dart';
-import 'package:go_glyder/features/account/scripts/auth.dart';
+import 'package:go_glyder/features/account/presentation/profile_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
 class Homepage extends StatefulWidget {
@@ -16,7 +17,13 @@ class Homepage extends StatefulWidget {
 }
 
 class _HomepageState extends State<Homepage> {
-  final AuthService _authService = AuthService();
+  void _openProfile() {
+    final uid = session.user?.uid;
+    if (uid == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProfilePage(uid: uid)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,32 +58,6 @@ class _HomepageState extends State<Homepage> {
         ),
       ),
     );
-  }
-
-  Future<void> _confirmSignOut() async {
-    final shouldSignOut = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text('You\'ll need to log back in to use GoGlyder.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Sign out'),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldSignOut ?? false) {
-      // The router's auth listener sends us back to /login automatically.
-      await _authService.signOut();
-    }
   }
 
   Widget _buildHeader() {
@@ -128,8 +109,8 @@ class _HomepageState extends State<Homepage> {
                 ],
               ),
               _HeaderIconButton(
-                icon: Icons.logout_rounded,
-                onTap: _confirmSignOut,
+                icon: Icons.person_rounded,
+                onTap: _openProfile,
               ),
             ],
           ),

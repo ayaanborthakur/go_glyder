@@ -20,6 +20,7 @@ class _PostRidePageState extends State<PostRidePage> {
   final _formKey = GlobalKey<FormState>();
   final _originC = TextEditingController();
   final _destC = TextEditingController();
+  final _milesC = TextEditingController();
   final _notesC = TextEditingController();
 
   DateTime? _date;
@@ -39,6 +40,7 @@ class _PostRidePageState extends State<PostRidePage> {
   void dispose() {
     _originC.dispose();
     _destC.dispose();
+    _milesC.dispose();
     _notesC.dispose();
     super.dispose();
   }
@@ -78,6 +80,7 @@ class _PostRidePageState extends State<PostRidePage> {
         date: _date!,
         time: _time!.format(context),
         seats: _seats,
+        distanceMiles: double.tryParse(_milesC.text.trim()) ?? 0,
         notes: _notesC.text.trim(),
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -152,6 +155,17 @@ class _PostRidePageState extends State<PostRidePage> {
             const SizedBox(height: 18),
             _label('Seats available'),
             _seatStepper(),
+            const SizedBox(height: 18),
+            _label('Approx. one-way distance  (miles)'),
+            TextFormField(
+              controller: _milesC,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                hintText: 'e.g. 4',
+                prefixIcon: Icon(Icons.eco_rounded),
+                helperText: 'Each rider you carpool banks this many carbon miles.',
+              ),
+            ),
             const SizedBox(height: 18),
             _label('Notes  (optional)'),
             TextFormField(

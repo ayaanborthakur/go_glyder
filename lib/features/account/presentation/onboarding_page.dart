@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/services/firestore_service.dart';

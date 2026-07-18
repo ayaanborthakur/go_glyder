@@ -7,10 +7,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Each user's own profile + private subcollections (contacts/messages,
-    // and the denormalized list of groups they've joined).
+    // Profiles are readable by any signed-in user (member lists, profile
+    // pages). Only the owner edits their own profile — except carbonMiles,
+    // which another user may increment when they carpool them.
     match /users/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId ||
+        request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly(['carbonMiles'])
+      );
 
       match /contacts/{contactId} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;

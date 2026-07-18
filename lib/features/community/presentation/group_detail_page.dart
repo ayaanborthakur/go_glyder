@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/features/account/presentation/profile_page.dart';
 import 'package:go_glyder/features/community/presentation/group_trips_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
@@ -305,6 +306,8 @@ class GroupDetailPage extends StatelessWidget {
                 children: [
                   for (var i = 0; i < docs.length; i++)
                     _memberTile(
+                      context,
+                      docs[i].id,
                       (docs[i].data()['displayName'] ?? 'Member') as String,
                       last: i == docs.length - 1,
                     ),
@@ -317,7 +320,12 @@ class GroupDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _memberTile(String name, {required bool last}) {
+  Widget _memberTile(
+    BuildContext context,
+    String uid,
+    String name, {
+    required bool last,
+  }) {
     return Container(
       decoration: BoxDecoration(
         border: last
@@ -325,6 +333,11 @@ class GroupDetailPage extends StatelessWidget {
             : const Border(bottom: BorderSide(color: AppColors.divider)),
       ),
       child: ListTile(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ProfilePage(uid: uid, fallbackName: name),
+          ),
+        ),
         leading: CircleAvatar(
           backgroundColor: AppColors.brandTint,
           child: Text(
@@ -339,6 +352,8 @@ class GroupDetailPage extends StatelessWidget {
           name,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
+        trailing: const Icon(Icons.chevron_right_rounded,
+            color: AppColors.textTertiary),
       ),
     );
   }

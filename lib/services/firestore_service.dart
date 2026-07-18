@@ -255,6 +255,7 @@ class FirestoreService {
     required DateTime date,
     required String time,
     required int seats,
+    double distanceMiles = 0,
     String notes = '',
   }) async {
     final uid = _uid;
@@ -272,6 +273,9 @@ class FirestoreService {
       'seatsTotal': seats,
       'seatsTaken': 0,
       'riders': <String>[],
+      // One-way distance; each accepted rider banks this many carbon miles
+      // (and so does the driver, for carpooling someone).
+      'distanceMiles': distanceMiles,
       'notes': notes,
       'status': 'open',
       'createdAt': FieldValue.serverTimestamp(),
@@ -334,12 +338,28 @@ class FirestoreService {
       final total = (trip['seatsTotal'] ?? 0) as int;
       final taken = (trip['seatsTaken'] ?? 0) as int;
       if (taken >= total) throw GroupException('This ride is already full.');
+
       tx.update(reqRef, {'status': 'accepted'});
       tx.update(tripRef, {
         'seatsTaken': taken + 1,
         'riders': FieldValue.arrayUnion([riderId]),
         'status': (taken + 1 >= total) ? 'full' : 'open',
       });
+
+      // Bank carbon miles: the passenger avoided driving this distance, and
+      // the driver gets credit for carpooling them. Both accrue the miles.
+      final miles = ((trip['distanceMiles'] ?? 0) as num).toDouble();
+      final driverId = trip['driverId'] as String?;
+      if (miles > 0) {
+        tx.set(_users.doc(riderId), {
+          'carbonMiles': FieldValue.increment(miles),
+        }, SetOptions(merge: true));
+        if (driverId != null) {
+          tx.set(_users.doc(driverId), {
+            'carbonMiles': FieldValue.increment(miles),
+          }, SetOptions(merge: true));
+        }
+      }
     });
   }
 
