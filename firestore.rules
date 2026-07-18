@@ -107,16 +107,39 @@ service cloud.firestore {
     // Direct conversations: only the two participants can read/write the
     // thread and its messages.
     match /conversations/{convId} {
-      allow read, update: if isSignedIn()
-                          && request.auth.uid in resource.data.participants;
+      // Any participant can read the conversation shell.
+      allow read: if isSignedIn()
+                  && request.auth.uid in resource.data.participants;
+
+      // Create: the creator must list themselves as a participant.
       allow create: if isSignedIn()
                     && request.auth.uid in request.resource.data.participants;
 
+      // Update: participants[] is IMMUTABLE after creation — cannot be
+      // widened to add a third party. Only the whitelisted metadata fields
+      // may change (last message preview, timestamp, unread counts).
+      allow update: if isSignedIn()
+                    && request.auth.uid in resource.data.participants
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys()
+                         .hasOnly(['lastMessage', 'lastMessageAt', 'unreadCount']);
+
       match /messages/{messageId} {
+        // Any participant may read or create messages.
         allow read, create: if isSignedIn()
           && request.auth.uid in
              get(/databases/$(database)/documents/conversations/$(convId))
                .data.participants;
+
+        // Soft-delete: only the original sender may flip isDeleted to true.
+        // No other field may change (prevents editing message text).
+        allow update: if isSignedIn()
+          && request.auth.uid ==
+             get(/databases/$(database)/documents/conversations/$(convId)/messages/$(messageId))
+               .data.senderId
+          && request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['isDeleted'])
+          && request.resource.data.isDeleted == true;
       }
     }
   }

@@ -36,6 +36,13 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAFcM1vkIjJ6XbDXIVy-w7ZO01hsvQIftA&libraries=marker"></script>
   </head>
   <body>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('firebase-messaging-sw.js')
+          .then(reg => console.log('[SW] registered', reg.scope))
+          .catch(err => console.error('[SW] registration failed', err));
+      }
+    </script>
     <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>

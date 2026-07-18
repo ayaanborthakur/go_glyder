@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/features/community/presentation/post_ride_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
 /// Carpool trips for a single group: the feed of posted rides, plus the
@@ -109,7 +110,7 @@ class _TripCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final me = _fs.currentUid;
+    final me = FirebaseAuth.instance.currentUser?.uid;
     final driverId = data['driverId'] as String?;
     final isDriver = me != null && me == driverId;
     final riders = (data['riders'] as List?)?.cast<String>() ?? const [];
