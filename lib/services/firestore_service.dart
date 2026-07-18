@@ -44,6 +44,18 @@ class FirestoreService {
     return snap.data();
   }
 
+  /// Stream a user's profile (for a profile screen).
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamUserProfile(String uid) {
+    return _users.doc(uid).snapshots();
+  }
+
+  /// Sets the signed-in user's role (parent / staff / admin).
+  Future<void> setUserRole(String role) {
+    final uid = _uid;
+    if (uid == null) return Future.value();
+    return _users.doc(uid).set({'role': role}, SetOptions(merge: true));
+  }
+
   // ---------------------------------------------------------------------
   // Community: carpool groups + feed posts
   // ---------------------------------------------------------------------
