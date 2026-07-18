@@ -19,6 +19,7 @@ export './admin/presentation/admin_dashboard_page.dart';
 export './analytics/presentation/analytics.dart';
 export './calendar/presentation/calendar.dart';
 export './community/presentation/community.dart';
+export './community/presentation/community_feed_page.dart';
 export './community/presentation/create_group_page.dart';
 export './community/presentation/group_detail_page.dart';
 export './community/presentation/group_trips_page.dart';
