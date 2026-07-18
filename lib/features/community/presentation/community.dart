@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/core/widgets.dart';
 import 'package:go_glyder/features/community/presentation/create_group_page.dart';
 import 'package:go_glyder/features/community/presentation/group_detail_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
@@ -72,6 +74,7 @@ class _CommunityPageState extends State<CommunityPage> {
 
           return Column(
             children: [
+              _heroHeader(_mySchoolNames[selected]),
               _schoolChips(mySchoolIds, selected),
               _searchBar(),
               Expanded(child: _directory(selected)),
@@ -80,6 +83,43 @@ class _CommunityPageState extends State<CommunityPage> {
         },
       ),
     );
+  }
+
+  // ---- Hero header ----
+  Widget _heroHeader(String? schoolName) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.brandDark, AppColors.brandGreen],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: AppRadius.xlAll,
+        boxShadow: kCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            schoolName ?? 'Your community',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 21,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Discover groups, carpools, and events happening around you.',
+            style: TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.3),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.08, end: 0);
   }
 
   // ---- No school yet ----
@@ -228,7 +268,8 @@ class _CommunityPageState extends State<CommunityPage> {
             if (groups.isEmpty)
               _emptyDirectory(all.isEmpty)
             else
-              for (final g in groups) _groupCard(schoolId, schoolName, g),
+              for (var i = 0; i < groups.length; i++)
+                _groupCard(schoolId, schoolName, groups[i], i),
           ],
         );
       },
@@ -272,6 +313,7 @@ class _CommunityPageState extends State<CommunityPage> {
     String schoolId,
     String? schoolName,
     QueryDocumentSnapshot<Map<String, dynamic>> g,
+    int index,
   ) {
     final data = g.data();
     final name = (data['name'] ?? 'Group') as String;
@@ -280,42 +322,129 @@ class _CommunityPageState extends State<CommunityPage> {
     final joined = _myGroupIds.contains(g.id);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: AppRadius.lgAll,
         boxShadow: kCardShadow,
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        onTap: () => _openGroup(schoolId, g.id, name, schoolName),
-        leading: CircleAvatar(
-          backgroundColor: AppColors.brandTint,
-          child: Icon(_iconFor(data['icon'] as String?),
-              color: AppColors.brandDark),
-        ),
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(
-          '$members member${members == 1 ? '' : 's'}'
-          '${category.isEmpty ? '' : ' · ${_categoryLabel(category)}'}',
-        ),
-        trailing: joined
-            ? const Chip(
-                label: Text('Joined'),
-                backgroundColor: AppColors.brandTint,
-                labelStyle: TextStyle(
-                  color: AppColors.brandDark,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openGroup(schoolId, g.id, name, schoolName),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Cover strip — gives each group a distinct visual identity by
+              // category instead of a plain icon on a flat background.
+              Container(
+                height: 56,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(gradient: groupCoverGradient(category)),
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  children: [
+                    Icon(_iconFor(data['icon'] as String?),
+                        color: Colors.white, size: 22),
+                    const Spacer(),
+                    if (joined)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Joined',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                visualDensity: VisualDensity.compact,
-              )
-            : ElevatedButton(
-                style: ElevatedButton.styleFrom(minimumSize: const Size(0, 38)),
-                onPressed: () => _joinGroup(schoolId, g.id, name, data),
-                child: const Text('Join'),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            category.isEmpty
+                                ? '$members member${members == 1 ? '' : 's'}'
+                                : '${_categoryLabel(category)} · $members member${members == 1 ? '' : 's'}',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            stream: _fs.streamGroupMembersPreview(
+                              schoolId,
+                              g.id,
+                            ),
+                            builder: (context, memberSnap) {
+                              final previewNames = (memberSnap.data?.docs ?? [])
+                                  .map((m) =>
+                                      (m.data()['displayName'] ?? 'Member')
+                                          as String)
+                                  .toList();
+                              if (previewNames.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return AvatarStack(
+                                names: previewNames,
+                                totalCount: members,
+                                size: 24,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    joined
+                        ? const Icon(Icons.chevron_right_rounded,
+                            color: AppColors.textTertiary)
+                        : ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 38),
+                            ),
+                            onPressed: () =>
+                                _joinGroup(schoolId, g.id, name, data),
+                            child: const Text('Join'),
+                          ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
+    ).animate(delay: (40 * index).ms).fadeIn(duration: 280.ms).slideY(
+      begin: 0.06,
+      end: 0,
+      curve: Curves.easeOut,
     );
   }
 

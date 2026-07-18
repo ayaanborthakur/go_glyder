@@ -89,17 +89,26 @@ class AvatarStack extends StatelessWidget {
   final double size;
   final int max;
 
+  /// Total member count, when [names] is only a bounded preview (e.g. a
+  /// `.limit(4)` query) rather than the full roster. When set, the "+N"
+  /// bubble reflects `totalCount - names.length` instead of the difference
+  /// between [names] and [max].
+  final int? totalCount;
+
   const AvatarStack({
     super.key,
     required this.names,
     this.size = 28,
     this.max = 4,
+    this.totalCount,
   });
 
   @override
   Widget build(BuildContext context) {
     final shown = names.take(max).toList();
-    final overflow = names.length - shown.length;
+    final overflow = totalCount != null
+        ? (totalCount! - names.length).clamp(0, 999)
+        : names.length - shown.length;
     final overlap = size * 0.62;
 
     return SizedBox(

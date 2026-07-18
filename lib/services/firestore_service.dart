@@ -226,6 +226,19 @@ class FirestoreService {
     return _members(schoolId, groupId).orderBy('displayName').snapshots();
   }
 
+  /// A bounded slice of a group's roster — for avatar-cluster previews on
+  /// directory cards, where reading the full roster per card would be wasteful.
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamGroupMembersPreview(
+    String schoolId,
+    String groupId, {
+    int limit = 4,
+  }) {
+    return _members(schoolId, groupId)
+        .orderBy('displayName')
+        .limit(limit)
+        .snapshots();
+  }
+
   Future<DocumentSnapshot<Map<String, dynamic>>> getGroup(
     String schoolId,
     String groupId,
