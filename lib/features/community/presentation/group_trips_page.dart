@@ -9,8 +9,9 @@ import 'package:go_glyder/features/community/presentation/post_ride_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
-/// Carpool trips for a single group: the feed of posted rides, plus the
-/// request/accept matching flow.
+/// Carpool trips for a single group as a full screen: the rides feed plus a
+/// "Post a ride" button. The feed itself lives in [GroupTripsView] so it can
+/// also be embedded directly inside the group's Rides tab.
 class GroupTripsPage extends StatelessWidget {
   final String schoolId;
   final String groupId;
@@ -24,8 +25,6 @@ class GroupTripsPage extends StatelessWidget {
     required this.groupName,
     this.schoolName,
   });
-
-  FirestoreService get _fs => FirestoreService.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -44,33 +43,53 @@ class GroupTripsPage extends StatelessWidget {
         icon: const Icon(Icons.add),
         label: const Text('Post a ride'),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _fs.streamGroupTrips(schoolId, groupId),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return const Center(child: Text('Could not load rides'));
-          }
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final trips = snap.data!.docs;
-          if (trips.isEmpty) return _empty();
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            itemCount: trips.length,
-            itemBuilder: (context, i) => _TripCard(
-              schoolId: schoolId,
-              groupId: groupId,
-              tripId: trips[i].id,
-              data: trips[i].data(),
-            ).animate(delay: (40 * i).ms).fadeIn(duration: 280.ms).slideY(
-              begin: 0.06,
-              end: 0,
-              curve: Curves.easeOut,
-            ),
-          );
-        },
-      ),
+      body: GroupTripsView(schoolId: schoolId, groupId: groupId),
+    );
+  }
+}
+
+/// The rides feed body — a live list of posted trips with the request/accept
+/// matching flow. No Scaffold or AppBar, so it drops straight into a tab.
+class GroupTripsView extends StatelessWidget {
+  final String schoolId;
+  final String groupId;
+
+  const GroupTripsView({
+    super.key,
+    required this.schoolId,
+    required this.groupId,
+  });
+
+  FirestoreService get _fs => FirestoreService.instance;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _fs.streamGroupTrips(schoolId, groupId),
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return const Center(child: Text('Could not load rides'));
+        }
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final trips = snap.data!.docs;
+        if (trips.isEmpty) return _empty();
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+          itemCount: trips.length,
+          itemBuilder: (context, i) => _TripCard(
+            schoolId: schoolId,
+            groupId: groupId,
+            tripId: trips[i].id,
+            data: trips[i].data(),
+          ).animate(delay: (40 * i).ms).fadeIn(duration: 280.ms).slideY(
+            begin: 0.06,
+            end: 0,
+            curve: Curves.easeOut,
+          ),
+        );
+      },
     );
   }
 

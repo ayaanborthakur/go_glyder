@@ -6,6 +6,7 @@ import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/core/widgets.dart';
 import 'package:go_glyder/features/account/presentation/profile_page.dart';
 import 'package:go_glyder/features/community/presentation/group_trips_page.dart';
+import 'package:go_glyder/features/community/presentation/post_ride_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
 /// A single group inside a school: its info, carpool rides, its own small
@@ -652,16 +653,9 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     );
   }
 
-  void _openRides() => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => GroupTripsPage(
-            schoolId: widget.schoolId,
-            groupId: widget.groupId,
-            groupName: widget.groupName,
-            schoolName: widget.schoolName,
-          ),
-        ),
-      );
+  // Overview's "Open" / ride tiles just switch to the Rides tab, which now
+  // shows the feed directly.
+  void _openRides() => _tabController.animateTo(1);
 
   // "3m", "2h", "4d", or a date for anything older than a week.
   String _relativeTime(DateTime t) {
@@ -714,60 +708,30 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   }
 
   // ---- Rides tab ----
+  // The rides feed shows directly in the tab — no intermediate "open" page.
+  // The "Post a ride" button rides along as a floating action inside the tab.
   Widget _ridesTab() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 84,
-              height: 84,
-              decoration: const BoxDecoration(
-                color: AppColors.brandTint,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.directions_car_filled_rounded,
-                size: 38,
-                color: AppColors.brandDark,
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Carpool rides',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Post a ride you\'re driving, or request a seat on someone '
-              'else\'s.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary, height: 1.4),
-            ),
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => GroupTripsPage(
-                      schoolId: widget.schoolId,
-                      groupId: widget.groupId,
-                      groupName: widget.groupName,
-                      schoolName: widget.schoolName,
-                    ),
-                  ),
+    return Stack(
+      children: [
+        GroupTripsView(schoolId: widget.schoolId, groupId: widget.groupId),
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton.extended(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PostRidePage(
+                  schoolId: widget.schoolId,
+                  groupId: widget.groupId,
+                  schoolName: widget.schoolName,
                 ),
-                icon: const Icon(Icons.arrow_forward_rounded),
-                label: const Text('Open rides'),
               ),
             ),
-          ],
+            icon: const Icon(Icons.add),
+            label: const Text('Post a ride'),
+          ),
         ),
-      ),
+      ],
     );
   }
 
