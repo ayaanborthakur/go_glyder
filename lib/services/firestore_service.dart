@@ -516,77 +516,20 @@ class FirestoreService {
   }
 
   // ---------------------------------------------------------------------
-  // Direct conversations — real two-way messaging. One shared doc per pair
-  // of users (id = both uids sorted), so BOTH participants read/write the
-  // same thread.
+  // Direct conversations — read-only count for the dashboard.
+  //
+  // All messaging reads/writes now live in MessagingService (messages_fs.dart),
+  // which is the single source of truth. The only thing left here is the
+  // conversation-list stream the analytics dashboard uses to show a count.
   // ---------------------------------------------------------------------
   CollectionReference<Map<String, dynamic>> get _conversations =>
       db.collection('conversations');
 
-  /// Deterministic conversation id shared by the current user and [otherUid].
-  String conversationIdFor(String otherUid) {
-    final ids = [_uid ?? '', otherUid]..sort();
-    return ids.join('_');
-  }
-
-  /// The current user's conversations. Sorted client-side (by lastMessageAt)
-  /// so no composite Firestore index is required. Empty for a new account.
+  /// The current user's conversations, as a raw snapshot stream — used by the
+  /// analytics dashboard purely to count them. For chat, use MessagingService.
   Stream<QuerySnapshot<Map<String, dynamic>>> streamMyConversations() {
     final uid = _uid;
     if (uid == null) return const Stream.empty();
     return _conversations.where('participants', arrayContains: uid).snapshots();
-  }
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> streamConversationMessages(
-    String conversationId,
-  ) {
-    return _conversations
-        .doc(conversationId)
-        .collection('messages')
-        .orderBy('timestamp')
-        .snapshots();
-  }
-
-  /// Creates the conversation shell if needed so an empty chat can be opened
-  /// before the first message. Returns the conversation id.
-  Future<String> ensureConversation({
-    required String otherUid,
-    required String otherName,
-  }) async {
-    final uid = _uid;
-    if (uid == null) throw GroupException('You must be signed in.');
-    final convId = conversationIdFor(otherUid);
-    await _conversations.doc(convId).set({
-      'participants': [uid, otherUid],
-      'names': {uid: _myName(), otherUid: otherName},
-      'lastMessageAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    return convId;
-  }
-
-  Future<void> sendDirectMessage({
-    required String otherUid,
-    required String otherName,
-    required String text,
-  }) async {
-    final uid = _uid;
-    if (uid == null) return;
-    final convRef = _conversations.doc(conversationIdFor(otherUid));
-    await convRef.set({
-      'participants': [uid, otherUid],
-      'names': {uid: _myName(), otherUid: otherName},
-      'lastMessage': text,
-      'lastMessageAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    await convRef.collection('messages').add({
-      'senderId': uid,
-      'text': text,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-  }
-
-  String _myName() {
-    final me = FirebaseAuth.instance.currentUser;
-    return me?.displayName ?? me?.email?.split('@').first ?? 'Me';
   }
 }

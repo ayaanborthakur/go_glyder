@@ -44,3 +44,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 build/
+
+# Cloud Functions dependencies — restored via `npm install`, never committed.
+node_modules/
+functions/node_modules/

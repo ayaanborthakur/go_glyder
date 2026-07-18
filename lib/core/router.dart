@@ -1,7 +1,6 @@
 import 'package:go_router/go_router.dart';
 
 import 'package:go_glyder/features/_index.g.dart';
-import 'package:go_glyder/features/account/presentation/onboarding_page.dart';
 
 import 'mainscreen.dart';
 import 'session.dart';

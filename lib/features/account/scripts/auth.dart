@@ -8,6 +8,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'package:go_glyder/services/notification_service.dart';
+import 'package:go_glyder/features/messages/logic/messages_logic.dart';
+
 /// Web OAuth client ID from android/app/google-services.json (client_type 3).
 /// google_sign_in needs this as the serverClientId so it returns an ID token
 /// whose audience Firebase will accept.
@@ -117,9 +120,21 @@ class AuthService {
         error: e,
       );
     }
+
+    // Associate this device's FCM token with the account now that we know the
+    // uid. Best-effort — a failure here must not block sign-in.
+    await NotificationService.instance.saveTokenForUser(user.uid);
   }
 
   Future<void> signOut() async {
+    // Stop pushes to this device and tear down the messaging stream before the
+    // auth session goes away.
+    final uid = _firebaseAuth.currentUser?.uid;
+    if (uid != null) {
+      await NotificationService.instance.clearTokenForUser(uid);
+    }
+    MessagesController.instance.unsubscribeFromConversations();
+
     await GoogleSignIn.instance.signOut();
     await _firebaseAuth.signOut();
   }

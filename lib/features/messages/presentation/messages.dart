@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/services/firestore_service.dart';
+import 'package:go_glyder/features/messages/logic/messages_logic.dart';
 
 /// Deterministic on-brand avatar gradient so each person keeps a stable color.
 LinearGradient avatarGradient(String name) {
@@ -60,7 +61,14 @@ class MessagesPage extends StatefulWidget {
 }
 
 class _MessagesPageState extends State<MessagesPage> {
-  final FirestoreService _firestore = FirestoreService.instance;
+  final MessagesController _controller = MessagesController.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    // Idempotent — the controller ignores a second subscribe if one is active.
+    _controller.subscribeToConversations();
+  }
 
   Future<void> _startNewMessage() async {
     final picked = await Navigator.of(context).push<_Member>(
@@ -78,7 +86,7 @@ class _MessagesPageState extends State<MessagesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final myUid = _firestore.currentUid;
+    final myUid = _controller.currentUid ?? '';
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -90,49 +98,37 @@ class _MessagesPageState extends State<MessagesPage> {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _firestore.streamMyConversations(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const _CenterNote('Could not load conversations');
+      body: ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) {
+          if (_controller.conversationsError != null) {
+            return _CenterNote(_controller.conversationsError!);
           }
-          if (!snapshot.hasData) {
+          if (_controller.conversationsLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-          final docs = snapshot.data!.docs.toList()
-            ..sort((a, b) {
-              final ta = a.data()['lastMessageAt'] as Timestamp?;
-              final tb = b.data()['lastMessageAt'] as Timestamp?;
-              return (tb?.millisecondsSinceEpoch ?? 0).compareTo(
-                ta?.millisecondsSinceEpoch ?? 0,
-              );
-            });
 
-          if (docs.isEmpty) return _emptyState();
+          final convs = _controller.conversations;
+          if (convs.isEmpty) return _emptyState();
 
           return ListView.builder(
             padding: const EdgeInsets.only(top: 12, bottom: 24),
-            itemCount: docs.length,
+            itemCount: convs.length,
             itemBuilder: (context, i) {
-              final data = docs[i].data();
-              final participants = List<String>.from(
-                data['participants'] ?? const [],
-              );
-              final names = Map<String, dynamic>.from(data['names'] ?? const {});
-              final otherUid = participants.firstWhere(
-                (p) => p != myUid,
-                orElse: () => '',
-              );
-              final otherName = (names[otherUid] ?? 'Member') as String;
-              final lastMessage = (data['lastMessage'] ?? '') as String;
-              final ts = data['lastMessageAt'] as Timestamp?;
+              final conv = convs[i];
+              final otherUid = conv.otherUid(myUid);
+              final otherName = conv.otherName(myUid);
+              final lastMessage = conv.lastMessage;
 
               return _ConversationTile(
                 name: otherName,
                 lastMessage: lastMessage.isEmpty
                     ? 'Say hi to start the conversation'
                     : lastMessage,
-                time: ts != null ? DateFormat.jm().format(ts.toDate()) : '',
+                time: conv.lastMessageAt != null
+                    ? DateFormat.jm().format(conv.lastMessageAt!)
+                    : '',
+                unread: conv.unreadFor(myUid),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) =>
@@ -191,17 +187,20 @@ class _ConversationTile extends StatelessWidget {
   final String name;
   final String lastMessage;
   final String time;
+  final int unread;
   final VoidCallback onTap;
 
   const _ConversationTile({
     required this.name,
     required this.lastMessage,
     required this.time,
+    required this.unread,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasUnread = unread > 0;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -229,23 +228,53 @@ class _ConversationTile extends StatelessWidget {
                       lastMessage,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textSecondary,
+                        color: hasUnread
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                        fontWeight:
+                            hasUnread ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              if (time.isNotEmpty)
-                Text(
-                  time,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (time.isNotEmpty)
+                    Text(
+                      time,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  if (hasUnread) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: AppColors.brandGreen,
+                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                      ),
+                      child: Text(
+                        unread > 99 ? '99+' : '$unread',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -400,22 +429,32 @@ class ChatDetailPage extends StatefulWidget {
 }
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
-  final FirestoreService _firestore = FirestoreService.instance;
-  final _controller = TextEditingController();
+  final MessagesController _controller = MessagesController.instance;
+  final _textController = TextEditingController();
   final _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    _controller.openChat(
+      otherUid: widget.otherUid,
+      otherName: widget.otherName,
+    );
+  }
+
+  @override
   void dispose() {
-    _controller.dispose();
+    _controller.closeChat();
+    _textController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _send() async {
-    final text = _controller.text.trim();
+    final text = _textController.text.trim();
     if (text.isEmpty) return;
-    _controller.clear();
-    await _firestore.sendDirectMessage(
+    _textController.clear();
+    await _controller.sendMessage(
       otherUid: widget.otherUid,
       otherName: widget.otherName,
       text: text,
@@ -437,8 +476,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final convId = _firestore.conversationIdFor(widget.otherUid);
-    final myUid = _firestore.currentUid;
+    final myUid = _controller.currentUid ?? '';
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -461,13 +499,16 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       body: Column(
         children: [
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _firestore.streamConversationMessages(convId),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+            child: ListenableBuilder(
+              listenable: _controller,
+              builder: (context, _) {
+                if (_controller.messagesError != null) {
+                  return _CenterNote(_controller.messagesError!);
+                }
+                if (_controller.messagesLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final msgs = snapshot.data!.docs;
+                final msgs = _controller.activeMessages;
                 if (msgs.isEmpty) return _emptyState();
                 WidgetsBinding.instance.addPostFrameCallback(
                   (_) => _scrollToBottom(),
@@ -477,13 +518,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   padding: const EdgeInsets.all(16),
                   itemCount: msgs.length,
                   itemBuilder: (context, i) {
-                    final data = msgs[i].data();
-                    final isUser = data['senderId'] == myUid;
-                    final ts = data['timestamp'] as Timestamp?;
+                    final msg = msgs[i];
+                    final isUser = msg.senderId == myUid;
                     return _bubble(
-                      (data['text'] ?? '') as String,
+                      msg.isDeleted ? 'This message was deleted' : msg.text,
                       isUser,
-                      ts?.toDate(),
+                      msg.timestamp,
+                      deleted: msg.isDeleted,
                     );
                   },
                 );
@@ -517,7 +558,12 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     );
   }
 
-  Widget _bubble(String text, bool isUser, DateTime? time) {
+  Widget _bubble(
+    String text,
+    bool isUser,
+    DateTime? time, {
+    bool deleted = false,
+  }) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -527,19 +573,19 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           maxWidth: MediaQuery.of(context).size.width * 0.72,
         ),
         decoration: BoxDecoration(
-          gradient: isUser
+          gradient: isUser && !deleted
               ? const LinearGradient(
                   colors: [AppColors.brandGreen, AppColors.brandDark],
                 )
               : null,
-          color: isUser ? null : AppColors.surface,
+          color: isUser && !deleted ? null : AppColors.surface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
             bottomLeft: Radius.circular(isUser ? 18 : 4),
             bottomRight: Radius.circular(isUser ? 4 : 18),
           ),
-          boxShadow: isUser ? null : kCardShadow,
+          boxShadow: isUser && !deleted ? null : kCardShadow,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,9 +593,12 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             Text(
               text,
               style: TextStyle(
-                color: isUser ? Colors.white : AppColors.textPrimary,
+                color: deleted
+                    ? AppColors.textTertiary
+                    : (isUser ? Colors.white : AppColors.textPrimary),
                 fontSize: 15,
                 height: 1.3,
+                fontStyle: deleted ? FontStyle.italic : FontStyle.normal,
               ),
             ),
             const SizedBox(height: 3),
@@ -557,7 +606,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               time != null ? DateFormat.jm().format(time) : 'now',
               style: TextStyle(
                 fontSize: 10.5,
-                color: isUser ? Colors.white70 : AppColors.textTertiary,
+                color: isUser && !deleted
+                    ? Colors.white70
+                    : AppColors.textTertiary,
               ),
             ),
           ],
@@ -582,7 +633,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         children: [
           Expanded(
             child: TextField(
-              controller: _controller,
+              controller: _textController,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _send(),
               decoration: InputDecoration(

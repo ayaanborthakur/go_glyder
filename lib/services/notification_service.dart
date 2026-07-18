@@ -45,12 +45,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 // ---------------------------------------------------------------------------
-// Global keys so NotificationService can show SnackBars and push routes
-// without needing a BuildContext passed in at call time.
-// Register both on MaterialApp.router in app.dart.
-//
+// Global key so NotificationService can show SnackBars without needing a
+// BuildContext passed in at call time. Register it on MaterialApp.router in
+// app.dart.
 // ---------------------------------------------------------------------------
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
@@ -61,6 +59,13 @@ class NotificationService {
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
 
+  /// Navigation callback wired up by the app at startup (see main.dart).
+  ///
+  /// Kept as a callback rather than importing the router directly so this
+  /// service never depends on the features/router layer (which would create a
+  /// services → features → services import cycle via auth.dart).
+  void Function(String route)? onNavigateToRoute;
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /// Call once from [main()] after [Firebase.initializeApp()].
@@ -68,6 +73,10 @@ class NotificationService {
   /// Registers the background handler, requests permission, fetches and saves
   /// the FCM token, and sets up the three message stream listeners.
   Future<void> initialize() async {
+    // 0. Background/terminated data handler must be registered before any other
+    //    FCM setup so the background isolate can find it.
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
     // 1. Permission (Android 13+ and Web both require an explicit grant)
     await _requestPermission();
 
@@ -236,10 +245,10 @@ class NotificationService {
 
     if (route == null) return;
 
-    // Small delay for the terminated-state case: the navigator isn't ready
+    // Small delay for the terminated-state case: the router isn't ready
     // until the first frame is rendered.
     Future.delayed(const Duration(milliseconds: 500), () {
-      navigatorKey.currentState?.pushNamed(route);
+      onNavigateToRoute?.call(route);
     });
 
     developer.log(

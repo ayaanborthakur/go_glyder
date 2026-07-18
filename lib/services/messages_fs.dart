@@ -56,9 +56,15 @@ class MessagingService {
   /// Deterministic conversation ID shared by [currentUid] and [otherUid].
   /// Produces the same string regardless of which participant calls it first.
   String conversationIdFor(String otherUid) {
-    final ids = [currentUid ?? '', otherUid]..sort();
-    return ids.join('_');
+    return _sortedPair(currentUid ?? '', otherUid).join('_');
   }
+
+  /// The two participant UIDs in a deterministic (sorted) order.
+  ///
+  /// Both participants MUST write the identical `participants` array, otherwise
+  /// a send/open by the second user changes the array's ordering and trips the
+  /// "participants is immutable" security rule (it compares the whole list).
+  List<String> _sortedPair(String a, String b) => [a, b]..sort();
 
   // ---------------------------------------------------------------------------
   // Streams — read
@@ -99,8 +105,12 @@ class MessagingService {
   // ---------------------------------------------------------------------------
 
   /// Ensures the conversation shell document exists for the pair
-  /// ([currentUid], [otherUid]). Safe to call repeatedly — uses merge so it
-  /// never overwrites an existing conversation.
+  /// ([currentUid], [otherUid]).
+  ///
+  /// Only writes the shell when it does NOT already exist. A blind merge-set
+  /// here would blank `lastMessage`, reset `lastMessageAt`, and zero out both
+  /// participants' `unreadCount` every time either user re-opens the thread —
+  /// so we read first and create only on the first open.
   ///
   /// Returns the conversation ID.
   Future<String> ensureConversation({
@@ -111,13 +121,18 @@ class MessagingService {
     if (uid == null) throw const MessagingException('You must be signed in.');
 
     final convId = conversationIdFor(otherUid);
-    await _conversations.doc(convId).set({
-      'participants': [uid, otherUid],
-      'names': {uid: _myName(), otherUid: otherName},
-      'lastMessage': '',
-      'lastMessageAt': FieldValue.serverTimestamp(),
-      'unreadCount': {uid: 0, otherUid: 0},
-    }, SetOptions(merge: true));
+    final ref = _conversations.doc(convId);
+
+    final snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({
+        'participants': _sortedPair(uid, otherUid),
+        'names': {uid: _myName(), otherUid: otherName},
+        'lastMessage': '',
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'unreadCount': {uid: 0, otherUid: 0},
+      });
+    }
 
     return convId;
   }
@@ -149,7 +164,10 @@ class MessagingService {
     batch.set(
       convRef,
       {
-        'participants': [uid, otherUid],
+        // Sorted so both participants write the identical array — otherwise the
+        // second sender's [me, other] ordering trips the immutable-participants
+        // rule. names is a map, so its key order is irrelevant to the diff.
+        'participants': _sortedPair(uid, otherUid),
         'names': {uid: _myName(), otherUid: otherName},
         'lastMessage': trimmed,
         'lastMessageAt': FieldValue.serverTimestamp(),

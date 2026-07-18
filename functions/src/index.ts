@@ -74,18 +74,21 @@ export const onNewDirectMessage = functions.firestore.onDocumentCreated(
  * Sends a push notification to the driver.
  */
 export const onNewSeatRequest = functions.firestore.onDocumentCreated(
-  'carpoolGroups/{groupId}/trips/{tripId}/requests/{riderId}',
+  'schools/{schoolId}/groups/{groupId}/trips/{tripId}/requests/{riderId}',
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
 
+    const schoolId = event.params.schoolId;
     const groupId = event.params.groupId;
     const tripId = event.params.tripId;
     const riderId = event.params.riderId;
 
     // 1. Get the trip document to find the driver
     const tripDoc = await db
-      .collection('carpoolGroups')
+      .collection('schools')
+      .doc(schoolId)
+      .collection('groups')
       .doc(groupId)
       .collection('trips')
       .doc(tripId)
@@ -115,6 +118,7 @@ export const onNewSeatRequest = functions.firestore.onDocumentCreated(
       data: {
         type: 'seat_request',
         route: '/community',
+        schoolId: schoolId,
         groupId: groupId,
         tripId: tripId,
       },
@@ -134,7 +138,7 @@ export const onNewSeatRequest = functions.firestore.onDocumentCreated(
  * Sends a push notification back to the rider.
  */
 export const onSeatRequestUpdated = functions.firestore.onDocumentUpdated(
-  'carpoolGroups/{groupId}/trips/{tripId}/requests/{riderId}',
+  'schools/{schoolId}/groups/{groupId}/trips/{tripId}/requests/{riderId}',
   async (event) => {
     const beforeData = event.data?.before.data();
     const afterData = event.data?.after.data();
@@ -165,6 +169,7 @@ export const onSeatRequestUpdated = functions.firestore.onDocumentUpdated(
       data: {
         type: 'seat_response',
         route: '/community',
+        schoolId: event.params.schoolId,
         groupId: event.params.groupId,
         tripId: event.params.tripId,
       },
