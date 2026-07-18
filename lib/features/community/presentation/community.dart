@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/core/widgets.dart';
+import 'package:go_glyder/features/community/presentation/community_feed_page.dart';
 import 'package:go_glyder/features/community/presentation/create_group_page.dart';
 import 'package:go_glyder/features/community/presentation/group_detail_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
@@ -72,13 +73,37 @@ class _CommunityPageState extends State<CommunityPage> {
               ? _selectedSchoolId!
               : mySchoolIds.first;
 
-          return Column(
-            children: [
-              _heroHeader(_mySchoolNames[selected]),
-              _schoolChips(mySchoolIds, selected),
-              _searchBar(),
-              Expanded(child: _directory(selected)),
-            ],
+          return DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                _heroHeader(_mySchoolNames[selected]),
+                _schoolChips(mySchoolIds, selected),
+                const TabBar(
+                  labelColor: AppColors.brandDark,
+                  unselectedLabelColor: AppColors.textTertiary,
+                  indicatorColor: AppColors.brandGreen,
+                  labelStyle: TextStyle(fontWeight: FontWeight.w700),
+                  tabs: [
+                    Tab(text: 'Groups'),
+                    Tab(text: 'Feed'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      Column(
+                        children: [
+                          _searchBar(),
+                          Expanded(child: _directory(selected)),
+                        ],
+                      ),
+                      CommunityFeed(schoolId: selected),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),

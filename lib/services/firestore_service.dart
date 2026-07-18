@@ -157,21 +157,55 @@ class FirestoreService {
   }
 
   // ---------------------------------------------------------------------
-  // Community posts (global feed — unchanged)
+  // Community feed — school-scoped posts with per-user likes and comments.
+  //
+  // A post's `likes`/`comments` are denormalized counters kept in step with
+  // the likes/{uid} and comments/{id} subcollections via batched writes, so
+  // the feed can show counts from the post doc itself without reading either
+  // subcollection per card. The likes/{uid} doc is the source of truth for
+  // "did I like this" and prevents double-likes.
   // ---------------------------------------------------------------------
   CollectionReference<Map<String, dynamic>> get _posts =>
       db.collection('communityPosts');
 
+  CollectionReference<Map<String, dynamic>> _postLikes(String postId) =>
+      _posts.doc(postId).collection('likes');
+
+  CollectionReference<Map<String, dynamic>> _postComments(String postId) =>
+      _posts.doc(postId).collection('comments');
+
+  /// Global post stream — used only for the dashboard count tiles. The feed
+  /// itself uses [streamSchoolPosts].
   Stream<QuerySnapshot<Map<String, dynamic>>> streamCommunityPosts() {
     return _posts.orderBy('createdAt', descending: true).snapshots();
   }
 
+  /// Posts for one school's feed, newest first. Filtered server-side by
+  /// schoolId and sorted client-side so no composite index is required.
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> streamSchoolPosts(
+    String schoolId,
+  ) {
+    return _posts.where('schoolId', isEqualTo: schoolId).snapshots().map((qs) {
+      final docs = qs.docs.toList()
+        ..sort((a, b) {
+          final ta = (a.data()['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+          final tb = (b.data()['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+          return tb.compareTo(ta);
+        });
+      return docs;
+    });
+  }
+
   Future<void> createCommunityPost({
-    required String author,
+    required String schoolId,
     required String content,
   }) {
+    final me = FirebaseAuth.instance.currentUser;
+    final author = me?.displayName ?? me?.email?.split('@').first ?? 'Member';
     return _posts.add({
+      'schoolId': schoolId,
       'author': author,
+      'authorPhotoUrl': me?.photoURL,
       'content': content,
       'likes': 0,
       'comments': 0,
@@ -180,8 +214,59 @@ class FirestoreService {
     });
   }
 
-  Future<void> likePost(String postId) {
-    return _posts.doc(postId).update({'likes': FieldValue.increment(1)});
+  Future<void> deleteCommunityPost(String postId) async {
+    if (_uid == null) return;
+    await _posts.doc(postId).delete();
+  }
+
+  /// Whether the current user has liked [postId] (live).
+  Stream<bool> streamHasLiked(String postId) {
+    final uid = _uid;
+    if (uid == null) return Stream.value(false);
+    return _postLikes(postId).doc(uid).snapshots().map((d) => d.exists);
+  }
+
+  /// Toggles the current user's like on [postId]. Writes the per-user like doc
+  /// and adjusts the denormalized counter atomically.
+  Future<void> toggleLike(String postId, bool currentlyLiked) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+    final likeRef = _postLikes(postId).doc(uid);
+    final postRef = _posts.doc(postId);
+    final batch = db.batch();
+    if (currentlyLiked) {
+      batch.delete(likeRef);
+      batch.update(postRef, {'likes': FieldValue.increment(-1)});
+    } else {
+      batch.set(likeRef, {'likedAt': FieldValue.serverTimestamp()});
+      batch.update(postRef, {'likes': FieldValue.increment(1)});
+    }
+    await batch.commit();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamPostComments(
+    String postId,
+  ) {
+    return _postComments(postId).orderBy('createdAt').snapshots();
+  }
+
+  Future<void> addComment(String postId, String text) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final me = FirebaseAuth.instance.currentUser;
+    final commentRef = _postComments(postId).doc();
+    final batch = db.batch();
+    batch.set(commentRef, {
+      'authorUid': uid,
+      'authorName': me?.displayName ?? me?.email?.split('@').first ?? 'Member',
+      'authorPhotoUrl': me?.photoURL,
+      'text': trimmed,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    batch.update(_posts.doc(postId), {'comments': FieldValue.increment(1)});
+    await batch.commit();
   }
 
   // ---------------------------------------------------------------------
