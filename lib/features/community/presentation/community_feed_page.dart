@@ -107,10 +107,10 @@ class _PostCard extends StatelessWidget {
     final author = (data['author'] ?? 'Member') as String;
     final content = (data['content'] ?? '') as String;
     final photoUrl = data['authorPhotoUrl'] as String?;
-    final likes = (data['likes'] ?? 0) as int;
-    final comments = (data['comments'] ?? 0) as int;
+    final likedBy = (data['likedBy'] as List?)?.cast<String>() ?? const [];
+    final commentCount = (data['comments'] as List?)?.length ?? 0;
+    final liked = _fs.currentUid != null && likedBy.contains(_fs.currentUid);
     final ts = data['createdAt'] as Timestamp?;
-    final mine = data['authorUid'] == _fs.currentUid;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -141,12 +141,6 @@ class _PostCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (mine)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                  color: AppColors.textTertiary,
-                  onPressed: () => _confirmDelete(context),
-                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -155,24 +149,18 @@ class _PostCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              StreamBuilder<bool>(
-                stream: _fs.streamHasLiked(post.id),
-                builder: (context, likeSnap) {
-                  final liked = likeSnap.data ?? false;
-                  return _ActionButton(
-                    icon: liked
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    label: '$likes',
-                    color: liked ? AppColors.danger : AppColors.textSecondary,
-                    onTap: () => _fs.toggleLike(post.id, liked),
-                  );
-                },
+              _ActionButton(
+                icon: liked
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                label: '${likedBy.length}',
+                color: liked ? AppColors.danger : AppColors.textSecondary,
+                onTap: () => _fs.toggleLike(post.id, liked),
               ),
               const SizedBox(width: 8),
               _ActionButton(
                 icon: Icons.mode_comment_outlined,
-                label: '$comments',
+                label: '$commentCount',
                 color: AppColors.textSecondary,
                 onTap: () => _openComments(context),
               ),
@@ -181,28 +169,6 @@ class _PostCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _confirmDelete(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete post?'),
-        content: const Text('This can\'t be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) await _fs.deleteCommunityPost(post.id);
   }
 
   void _openComments(BuildContext context) {
@@ -380,13 +346,25 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                 ),
               ),
               Expanded(
-                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: _fs.streamPostComments(widget.postId),
+                child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: _fs.streamPost(widget.postId),
                   builder: (context, snap) {
                     if (!snap.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    final comments = snap.data!.docs;
+                    final comments =
+                        ((snap.data!.data()?['comments'] as List?) ?? const [])
+                            .cast<Map<String, dynamic>>()
+                            .toList()
+                          ..sort((a, b) {
+                            final ta = (a['createdAt'] as Timestamp?)
+                                    ?.millisecondsSinceEpoch ??
+                                0;
+                            final tb = (b['createdAt'] as Timestamp?)
+                                    ?.millisecondsSinceEpoch ??
+                                0;
+                            return ta.compareTo(tb);
+                          });
                     if (comments.isEmpty) {
                       return const _CenterNote('No comments yet — say something');
                     }
@@ -395,7 +373,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: comments.length,
                       itemBuilder: (context, i) {
-                        final c = comments[i].data();
+                        final c = comments[i];
                         final name = (c['authorName'] ?? 'Member') as String;
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),

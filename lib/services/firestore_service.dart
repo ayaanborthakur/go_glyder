@@ -157,22 +157,13 @@ class FirestoreService {
   }
 
   // ---------------------------------------------------------------------
-  // Community feed — school-scoped posts with per-user likes and comments.
-  //
-  // A post's `likes`/`comments` are denormalized counters kept in step with
-  // the likes/{uid} and comments/{id} subcollections via batched writes, so
-  // the feed can show counts from the post doc itself without reading either
-  // subcollection per card. The likes/{uid} doc is the source of truth for
-  // "did I like this" and prevents double-likes.
+  // Community feed — school-scoped posts. Likes and comments live ON the
+  // post document (a `likedBy` uid array and a `comments` array of maps) so
+  // every write is a plain post-doc update, covered by the existing
+  // communityPosts rules — no subcollections, no rules changes.
   // ---------------------------------------------------------------------
   CollectionReference<Map<String, dynamic>> get _posts =>
       db.collection('communityPosts');
-
-  CollectionReference<Map<String, dynamic>> _postLikes(String postId) =>
-      _posts.doc(postId).collection('likes');
-
-  CollectionReference<Map<String, dynamic>> _postComments(String postId) =>
-      _posts.doc(postId).collection('comments');
 
   /// Global post stream — used only for the dashboard count tiles. The feed
   /// itself uses [streamSchoolPosts].
@@ -196,6 +187,11 @@ class FirestoreService {
     });
   }
 
+  /// Live stream of a single post (used by the comments sheet).
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamPost(String postId) {
+    return _posts.doc(postId).snapshots();
+  }
+
   Future<void> createCommunityPost({
     required String schoolId,
     required String content,
@@ -207,66 +203,45 @@ class FirestoreService {
       'author': author,
       'authorPhotoUrl': me?.photoURL,
       'content': content,
-      'likes': 0,
-      'comments': 0,
+      'likedBy': <String>[],
+      'comments': <Map<String, dynamic>>[],
       'createdAt': FieldValue.serverTimestamp(),
       'authorUid': _uid,
     });
   }
 
-  Future<void> deleteCommunityPost(String postId) async {
-    if (_uid == null) return;
-    await _posts.doc(postId).delete();
-  }
-
-  /// Whether the current user has liked [postId] (live).
-  Stream<bool> streamHasLiked(String postId) {
-    final uid = _uid;
-    if (uid == null) return Stream.value(false);
-    return _postLikes(postId).doc(uid).snapshots().map((d) => d.exists);
-  }
-
-  /// Toggles the current user's like on [postId]. Writes the per-user like doc
-  /// and adjusts the denormalized counter atomically.
-  Future<void> toggleLike(String postId, bool currentlyLiked) async {
+  /// Toggles the current user's like by adding/removing their uid from the
+  /// post's `likedBy` array. A plain post-doc update.
+  Future<void> toggleLike(String postId, bool currentlyLiked) {
     final uid = _uid;
     if (uid == null) throw GroupException('You must be signed in.');
-    final likeRef = _postLikes(postId).doc(uid);
-    final postRef = _posts.doc(postId);
-    final batch = db.batch();
-    if (currentlyLiked) {
-      batch.delete(likeRef);
-      batch.update(postRef, {'likes': FieldValue.increment(-1)});
-    } else {
-      batch.set(likeRef, {'likedAt': FieldValue.serverTimestamp()});
-      batch.update(postRef, {'likes': FieldValue.increment(1)});
-    }
-    await batch.commit();
+    return _posts.doc(postId).update({
+      'likedBy': currentlyLiked
+          ? FieldValue.arrayRemove([uid])
+          : FieldValue.arrayUnion([uid]),
+    });
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> streamPostComments(
-    String postId,
-  ) {
-    return _postComments(postId).orderBy('createdAt').snapshots();
-  }
-
-  Future<void> addComment(String postId, String text) async {
+  /// Appends a comment to the post's `comments` array. Uses a client
+  /// timestamp because serverTimestamp() is not allowed inside array values.
+  Future<void> addComment(String postId, String text) {
     final uid = _uid;
     if (uid == null) throw GroupException('You must be signed in.');
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty) return Future.value();
     final me = FirebaseAuth.instance.currentUser;
-    final commentRef = _postComments(postId).doc();
-    final batch = db.batch();
-    batch.set(commentRef, {
-      'authorUid': uid,
-      'authorName': me?.displayName ?? me?.email?.split('@').first ?? 'Member',
-      'authorPhotoUrl': me?.photoURL,
-      'text': trimmed,
-      'createdAt': FieldValue.serverTimestamp(),
+    return _posts.doc(postId).update({
+      'comments': FieldValue.arrayUnion([
+        {
+          'authorUid': uid,
+          'authorName':
+              me?.displayName ?? me?.email?.split('@').first ?? 'Member',
+          'authorPhotoUrl': me?.photoURL,
+          'text': trimmed,
+          'createdAt': Timestamp.now(),
+        }
+      ]),
     });
-    batch.update(_posts.doc(postId), {'comments': FieldValue.increment(1)});
-    await batch.commit();
   }
 
   // ---------------------------------------------------------------------
@@ -440,22 +415,6 @@ class FirestoreService {
       'admins': isAdmin
           ? FieldValue.arrayUnion([memberUid])
           : FieldValue.arrayRemove([memberUid]),
-    });
-  }
-
-  /// Removes another member from a group (admin action). Deletes the group's
-  /// roster entry and decrements the counter. Note: the removed user's own
-  /// `myGroups` shortcut can only be cleared by that user (it lives under
-  /// their profile), so it may linger until they next open the group.
-  Future<void> removeMember({
-    required String schoolId,
-    required String groupId,
-    required String memberUid,
-  }) async {
-    await _members(schoolId, groupId).doc(memberUid).delete();
-    await _groupsCol(schoolId).doc(groupId).update({
-      'members': FieldValue.increment(-1),
-      'admins': FieldValue.arrayRemove([memberUid]),
     });
   }
 

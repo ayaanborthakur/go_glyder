@@ -547,69 +547,19 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 ),
               ),
         trailing: canManage
-            ? PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded,
-                    color: AppColors.textTertiary),
-                onSelected: (v) => _onMemberAction(v, uid, name, isMemberAdmin),
-                itemBuilder: (_) => [
-                  PopupMenuItem(
-                    value: 'toggleAdmin',
-                    child: Text(isMemberAdmin ? 'Remove admin' : 'Make admin'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'remove',
-                    child: Text('Remove from group'),
-                  ),
-                ],
+            ? TextButton(
+                onPressed: () => _fs.setGroupAdmin(
+                  schoolId: widget.schoolId,
+                  groupId: widget.groupId,
+                  memberUid: uid,
+                  isAdmin: !isMemberAdmin,
+                ),
+                child: Text(isMemberAdmin ? 'Remove admin' : 'Make admin'),
               )
             : const Icon(Icons.chevron_right_rounded,
                 color: AppColors.textTertiary),
       ),
     );
-  }
-
-  Future<void> _onMemberAction(
-    String action,
-    String uid,
-    String name,
-    bool isMemberAdmin,
-  ) async {
-    if (action == 'toggleAdmin') {
-      await _fs.setGroupAdmin(
-        schoolId: widget.schoolId,
-        groupId: widget.groupId,
-        memberUid: uid,
-        isAdmin: !isMemberAdmin,
-      );
-      return;
-    }
-    if (action == 'remove') {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Remove $name?'),
-          content: Text('$name will lose access to this group.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Remove'),
-            ),
-          ],
-        ),
-      );
-      if (ok == true) {
-        await _fs.removeMember(
-          schoolId: widget.schoolId,
-          groupId: widget.groupId,
-          memberUid: uid,
-        );
-      }
-    }
   }
 
   // ---- Edit group (admin) ----
