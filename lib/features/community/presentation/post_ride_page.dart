@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/services/firestore_service.dart';
+import 'package:go_glyder/services/places_service.dart';
 
 /// Form for a driver to post a carpool trip in a group. Returns `true` on
 /// success. Destination is pre-filled with the group's school when known.
@@ -29,6 +31,17 @@ class _PostRidePageState extends State<PostRidePage> {
   final _milesC = TextEditingController();
   final _notesC = TextEditingController();
 
+  final FocusNode _originFocus = FocusNode();
+  final FocusNode _destFocus = FocusNode();
+  final FocusNode _milesFocus = FocusNode();
+  final FocusNode _notesFocus = FocusNode();
+
+  final PlacesService _placesService = PlacesService();
+  Timer? _debounce;
+  List<PlaceSuggestion> _suggestions = [];
+  String? _activeFieldName;
+  bool _isSearching = false;
+
   DateTime? _date;
   TimeOfDay? _time;
   int _seats = 3;
@@ -40,6 +53,38 @@ class _PostRidePageState extends State<PostRidePage> {
     if (widget.schoolName != null && widget.schoolName!.isNotEmpty) {
       _destC.text = widget.schoolName!;
     }
+    _originFocus.addListener(() {
+      if (_originFocus.hasFocus) {
+        setState(() {
+          _activeFieldName = 'origin';
+          _onSearchChanged(_originC.text);
+        });
+      }
+    });
+    _destFocus.addListener(() {
+      if (_destFocus.hasFocus) {
+        setState(() {
+          _activeFieldName = 'destination';
+          _onSearchChanged(_destC.text);
+        });
+      }
+    });
+    _milesFocus.addListener(() {
+      if (_milesFocus.hasFocus) {
+        setState(() {
+          _suggestions = [];
+          _activeFieldName = null;
+        });
+      }
+    });
+    _notesFocus.addListener(() {
+      if (_notesFocus.hasFocus) {
+        setState(() {
+          _suggestions = [];
+          _activeFieldName = null;
+        });
+      }
+    });
   }
 
   @override
@@ -48,7 +93,29 @@ class _PostRidePageState extends State<PostRidePage> {
     _destC.dispose();
     _milesC.dispose();
     _notesC.dispose();
+    _originFocus.dispose();
+    _destFocus.dispose();
+    _milesFocus.dispose();
+    _notesFocus.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
+      if (query.trim().isEmpty) {
+        setState(() => _suggestions = []);
+        return;
+      }
+      setState(() => _isSearching = true);
+      final results = await _placesService.searchPlaces(query);
+      if (!mounted) return;
+      setState(() {
+        _suggestions = results;
+        _isSearching = false;
+      });
+    });
   }
 
   Future<void> _pickDate() async {
@@ -119,6 +186,8 @@ class _PostRidePageState extends State<PostRidePage> {
             _label('Pickup location'),
             TextFormField(
               controller: _originC,
+              focusNode: _originFocus,
+              onChanged: _onSearchChanged,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
                 hintText: 'Where you start from',
@@ -127,10 +196,22 @@ class _PostRidePageState extends State<PostRidePage> {
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter a pickup point' : null,
             ),
+            if (_activeFieldName == 'origin' && (_isSearching || _suggestions.isNotEmpty))
+              _buildSuggestionsList(
+                onSelect: (suggestion) {
+                  setState(() {
+                    _originC.text = suggestion.description;
+                    _suggestions = [];
+                  });
+                  _originFocus.unfocus();
+                },
+              ),
             const SizedBox(height: 18),
             _label('Drop-off'),
             TextFormField(
               controller: _destC,
+              focusNode: _destFocus,
+              onChanged: _onSearchChanged,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
                 hintText: 'School or destination',
@@ -139,6 +220,16 @@ class _PostRidePageState extends State<PostRidePage> {
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter a destination' : null,
             ),
+            if (_activeFieldName == 'destination' && (_isSearching || _suggestions.isNotEmpty))
+              _buildSuggestionsList(
+                onSelect: (suggestion) {
+                  setState(() {
+                    _destC.text = suggestion.description;
+                    _suggestions = [];
+                  });
+                  _destFocus.unfocus();
+                },
+              ),
             const SizedBox(height: 18),
             Row(
               children: [
@@ -166,6 +257,7 @@ class _PostRidePageState extends State<PostRidePage> {
             _label('Approx. one-way distance  (miles)'),
             TextFormField(
               controller: _milesC,
+              focusNode: _milesFocus,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 hintText: 'e.g. 4',
@@ -177,6 +269,7 @@ class _PostRidePageState extends State<PostRidePage> {
             _label('Notes  (optional)'),
             TextFormField(
               controller: _notesC,
+              focusNode: _notesFocus,
               textCapitalization: TextCapitalization.sentences,
               maxLines: 2,
               decoration: const InputDecoration(
@@ -202,6 +295,64 @@ class _PostRidePageState extends State<PostRidePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestionsList({required ValueChanged<PlaceSuggestion> onSelect}) {
+    if (_isSearching) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brandGreen,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_suggestions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4, bottom: 8),
+      constraints: const BoxConstraints(maxHeight: 200),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppRadius.smAll,
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const ClampingScrollPhysics(),
+        itemCount: _suggestions.length,
+        separatorBuilder: (context, index) =>
+            const Divider(height: 1, color: AppColors.divider),
+        itemBuilder: (context, index) {
+          final suggestion = _suggestions[index];
+          return ListTile(
+            dense: true,
+            leading: const Icon(
+              Icons.location_on,
+              color: AppColors.brandGreen,
+              size: 18,
+            ),
+            title: Text(
+              suggestion.description,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            onTap: () => onSelect(suggestion),
+          );
+        },
       ),
     );
   }
