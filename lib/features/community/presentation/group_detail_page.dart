@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/features/community/presentation/group_trips_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
 class GroupDetailPage extends StatelessWidget {
@@ -65,6 +66,8 @@ class GroupDetailPage extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             children: [
               _aboutCard(schoolName, pickupArea, members),
+              const SizedBox(height: 14),
+              _ridesButton(context, schoolName),
               const SizedBox(height: 20),
               if (description.isNotEmpty) ...[
                 Text(
@@ -99,6 +102,50 @@ class GroupDetailPage extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _ridesButton(BuildContext context, String schoolName) {
+    return Material(
+      color: AppColors.brandDark,
+      borderRadius: AppRadius.lgAll,
+      child: InkWell(
+        borderRadius: AppRadius.lgAll,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => GroupTripsPage(
+              groupId: groupId,
+              groupName: groupName,
+              schoolName: schoolName,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              const Icon(Icons.directions_car_filled_rounded, color: Colors.white),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Carpool rides',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16)),
+                    Text('Post a ride or request a seat',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: Colors.white, size: 16),
+            ],
+          ),
+        ),
       ),
     );
   }

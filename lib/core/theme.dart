@@ -32,6 +32,7 @@ class AppColors {
   // Status
   static const Color danger = Color(0xFFE5484D);
   static const Color success = Color(0xFF2FBF71);
+  static const Color accentOrange = Color(0xFFF59E0B);
 }
 
 /// Shared corner radii — keeps every card/button on the same rounding scale.

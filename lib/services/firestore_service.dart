@@ -222,6 +222,116 @@ class FirestoreService {
   }
 
   // ---------------------------------------------------------------------
+  // Carpool trips + seat requests (posting & matching), scoped to a group
+  // ---------------------------------------------------------------------
+  CollectionReference<Map<String, dynamic>> _trips(String groupId) =>
+      _groups.doc(groupId).collection('trips');
+
+  CollectionReference<Map<String, dynamic>> _tripRequests(
+    String groupId,
+    String tripId,
+  ) => _trips(groupId).doc(tripId).collection('requests');
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamGroupTrips(String groupId) {
+    return _trips(groupId).orderBy('date').snapshots();
+  }
+
+  Future<String> createTrip({
+    required String groupId,
+    required String origin,
+    required String destination,
+    required DateTime date,
+    required String time,
+    required int seats,
+    String notes = '',
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+    final me = FirebaseAuth.instance.currentUser;
+    final driverName =
+        me?.displayName ?? me?.email?.split('@').first ?? 'Driver';
+    final ref = await _trips(groupId).add({
+      'driverId': uid,
+      'driverName': driverName,
+      'origin': origin,
+      'destination': destination,
+      'date': Timestamp.fromDate(date),
+      'time': time,
+      'seatsTotal': seats,
+      'seatsTaken': 0,
+      'riders': <String>[],
+      'notes': notes,
+      'status': 'open',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return ref.id;
+  }
+
+  Future<void> cancelTrip(String groupId, String tripId) {
+    return _trips(groupId).doc(tripId).update({'status': 'cancelled'});
+  }
+
+  /// A rider asks the driver for a seat (creates a pending request).
+  Future<void> requestSeat(String groupId, String tripId) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+    final me = FirebaseAuth.instance.currentUser;
+    final riderName =
+        me?.displayName ?? me?.email?.split('@').first ?? 'Rider';
+    await _tripRequests(groupId, tripId).doc(uid).set({
+      'riderId': uid,
+      'riderName': riderName,
+      'status': 'pending',
+      'requestedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> streamTripRequests(
+    String groupId,
+    String tripId,
+  ) {
+    return _tripRequests(groupId, tripId).orderBy('requestedAt').snapshots();
+  }
+
+  /// The current user's own request on a trip (to show their status).
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamMyTripRequest(
+    String groupId,
+    String tripId,
+  ) {
+    return _tripRequests(groupId, tripId).doc(_uid ?? 'anon').snapshots();
+  }
+
+  /// Driver accepts or declines a request. Accepting fills a seat atomically
+  /// (and flips the trip to "full" when the last seat goes).
+  Future<void> respondToRequest({
+    required String groupId,
+    required String tripId,
+    required String riderId,
+    required bool accept,
+  }) async {
+    final tripRef = _trips(groupId).doc(tripId);
+    final reqRef = _tripRequests(groupId, tripId).doc(riderId);
+
+    if (!accept) {
+      await reqRef.update({'status': 'declined'});
+      return;
+    }
+
+    await _db.runTransaction((tx) async {
+      final trip = (await tx.get(tripRef)).data() ?? {};
+      final total = (trip['seatsTotal'] ?? 0) as int;
+      final taken = (trip['seatsTaken'] ?? 0) as int;
+      if (taken >= total) throw GroupException('This ride is already full.');
+      tx.update(reqRef, {'status': 'accepted'});
+      tx.update(tripRef, {
+        'seatsTaken': taken + 1,
+        'riders': FieldValue.arrayUnion([riderId]),
+        'status': (taken + 1 >= total) ? 'full' : 'open',
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------------
   // Direct conversations — real two-way messaging. One shared doc per pair
   // of users (id = both uids sorted), so BOTH participants read/write the
   // same thread. Supersedes the per-user `contacts` methods above.

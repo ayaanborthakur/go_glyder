@@ -44,6 +44,23 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if isSignedIn() && request.auth.uid == memberId;
       }
+
+      // Carpool trips. Anyone signed in can view; only the driver posts a
+      // trip; updates (seat fills / cancel) are left open for the MVP.
+      match /trips/{tripId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+                      && request.resource.data.driverId == request.auth.uid;
+        allow update, delete: if isSignedIn();
+
+        // Seat requests: a rider manages their own request doc; the driver
+        // (any signed-in user, for the MVP) can update its status.
+        match /requests/{riderId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn() && request.auth.uid == riderId;
+          allow update, delete: if isSignedIn();
+        }
+      }
     }
 
     // Shared school calendar events.
