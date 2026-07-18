@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -8,7 +7,8 @@ import 'package:go_glyder/core/session.dart';
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/features/account/presentation/profile_page.dart';
 import 'package:go_glyder/features/admin/presentation/admin_dashboard_page.dart';
-import 'package:go_glyder/services/firestore_service.dart';
+import 'package:go_glyder/models/calendar_entry.dart';
+import 'package:go_glyder/services/school_calendar_service.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -242,35 +242,29 @@ class _HomepageState extends State<Homepage> {
   Widget _buildUpcomingSection() {
     return Padding(
       padding: AppSpacing.page,
-      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirestoreService.instance.streamCalendarEvents(),
+      child: FutureBuilder<List<CalendarEntry>>(
+        future: SchoolCalendarService.instance.fetchMySchoolEvents(),
         builder: (context, snapshot) {
-          // Events stream is ordered by date ascending, so the first one that
-          // isn't in the past is the next upcoming event.
-          Map<String, dynamic>? next;
+          // Find the soonest event that isn't in the past.
+          CalendarEntry? next;
           if (snapshot.hasData) {
             final now = DateTime.now();
             final today = DateTime(now.year, now.month, now.day);
-            for (final doc in snapshot.data!.docs) {
-              final ts = doc.data()['date'] as Timestamp?;
-              if (ts == null) continue;
-              if (!ts.toDate().isBefore(today)) {
-                next = doc.data();
-                break;
-              }
-            }
+            final upcoming =
+                snapshot.data!.where((e) => !e.date.isBefore(today)).toList()
+                  ..sort((a, b) => a.date.compareTo(b.date));
+            if (upcoming.isNotEmpty) next = upcoming.first;
           }
 
           final hasEvent = next != null;
-          final title = hasEvent ? (next['title'] ?? 'Untitled') as String : 'No upcoming events';
-          String subtitle = 'Add one from the calendar';
+          final title = hasEvent ? next.title : 'No upcoming events';
+          String subtitle = 'Your school calendar shows up here';
           if (hasEvent) {
-            final ts = next['date'] as Timestamp?;
-            final dateStr = ts != null
-                ? DateFormat('MMM d, yyyy').format(ts.toDate())
-                : '';
-            final time = (next['time'] ?? '') as String;
-            subtitle = [dateStr, if (time.isNotEmpty) time].join(' · ');
+            final dateStr = DateFormat('MMM d, yyyy').format(next.date);
+            subtitle = [
+              dateStr,
+              if (next.time.isNotEmpty) next.time,
+            ].join(' · ');
           }
 
           return Container(

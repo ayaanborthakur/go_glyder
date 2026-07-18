@@ -8,8 +8,9 @@ service cloud.firestore {
     }
 
     // Profiles are readable by any signed-in user (member lists, profile
-    // pages). Only the owner edits their own profile — except carbonMiles,
-    // which another user may increment when they carpool them.
+    // pages, group rosters). Only the owner edits their own profile —
+    // except carbonMiles, which another user may increment when they
+    // carpool them.
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, delete: if isSignedIn() && request.auth.uid == userId;
@@ -32,12 +33,16 @@ service cloud.firestore {
       }
     }
 
-    // Schools. The school doc (name) is public to signed-in users, but the
-    // school itself and its secret admin code are created only by the
-    // GoGlyder operator (console/CLI) — never by app clients.
+    // Schools. The school doc (name, calendar pointer) is public to any
+    // signed-in user — regular members join by picking from this list, no
+    // code required. Only the GoGlyder operator (console/CLI) creates a
+    // school; only a VERIFIED ADMIN may update its calendar index.
     match /schools/{schoolId} {
       allow read: if isSignedIn();
-      allow write: if false;
+      allow create, delete: if false;
+      allow update: if isSignedIn() &&
+        exists(/databases/$(database)/documents/schools/$(schoolId)/admins/$(request.auth.uid)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['calendars']);
 
       // Secret config (the admin code). No client can read or write it, but
       // security-rule get() below still reads it server-side to verify.
@@ -58,50 +63,45 @@ service cloud.firestore {
                .data.adminCode;
         allow delete: if isSignedIn() && request.auth.uid == adminUid;
       }
+
+      // Community groups within this school. Open discovery (list/search) —
+      // no join code. A user manages only their own membership doc.
+      match /groups/{groupId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+                      && request.resource.data.createdBy == request.auth.uid;
+        // Member-count bump and inline events-array edits are left open
+        // for the MVP (any signed-in user, matching the trips model below).
+        allow update: if isSignedIn();
+
+        match /members/{memberId} {
+          allow read: if isSignedIn();
+          allow write: if isSignedIn() && request.auth.uid == memberId;
+        }
+
+        // Carpool trips. Anyone signed in can view; only the driver posts a
+        // trip; updates (seat fills / cancel) are left open for the MVP.
+        match /trips/{tripId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn()
+                        && request.resource.data.driverId == request.auth.uid;
+          allow update, delete: if isSignedIn();
+
+          // Seat requests: a rider manages their own request doc; the driver
+          // (any signed-in user, for the MVP) can update its status.
+          match /requests/{riderId} {
+            allow read: if isSignedIn();
+            allow create: if isSignedIn() && request.auth.uid == riderId;
+            allow update, delete: if isSignedIn();
+          }
+        }
+      }
     }
 
     // Shared community content: any signed-in user can read/post.
     match /communityPosts/{postId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn();
-    }
-
-    // Carpool / community groups. Anyone signed in can look one up (needed to
-    // join by code) and update the member count; only the owner sets createdBy.
-    // A user manages only their own membership doc in the roster.
-    match /carpoolGroups/{groupId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn()
-                    && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isSignedIn();
-
-      match /members/{memberId} {
-        allow read: if isSignedIn();
-        allow write: if isSignedIn() && request.auth.uid == memberId;
-      }
-
-      // Carpool trips. Anyone signed in can view; only the driver posts a
-      // trip; updates (seat fills / cancel) are left open for the MVP.
-      match /trips/{tripId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn()
-                      && request.resource.data.driverId == request.auth.uid;
-        allow update, delete: if isSignedIn();
-
-        // Seat requests: a rider manages their own request doc; the driver
-        // (any signed-in user, for the MVP) can update its status.
-        match /requests/{riderId} {
-          allow read: if isSignedIn();
-          allow create: if isSignedIn() && request.auth.uid == riderId;
-          allow update, delete: if isSignedIn();
-        }
-      }
-    }
-
-    // Shared school calendar events.
-    match /calendarEvents/{eventId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isSignedIn();
     }
 
     // Direct conversations: only the two participants can read/write the

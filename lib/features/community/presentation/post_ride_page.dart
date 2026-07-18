@@ -7,10 +7,16 @@ import 'package:go_glyder/services/firestore_service.dart';
 /// Form for a driver to post a carpool trip in a group. Returns `true` on
 /// success. Destination is pre-filled with the group's school when known.
 class PostRidePage extends StatefulWidget {
+  final String schoolId;
   final String groupId;
   final String? schoolName;
 
-  const PostRidePage({super.key, required this.groupId, this.schoolName});
+  const PostRidePage({
+    super.key,
+    required this.schoolId,
+    required this.groupId,
+    this.schoolName,
+  });
 
   @override
   State<PostRidePage> createState() => _PostRidePageState();
@@ -74,6 +80,7 @@ class _PostRidePageState extends State<PostRidePage> {
     setState(() => _isLoading = true);
     try {
       await FirestoreService.instance.createTrip(
+        schoolId: widget.schoolId,
         groupId: widget.groupId,
         origin: _originC.text.trim(),
         destination: _destC.text.trim(),

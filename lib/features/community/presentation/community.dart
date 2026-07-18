@@ -1,11 +1,15 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:go_glyder/services/firestore_service.dart';
+import 'package:flutter/material.dart';
+
+import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/features/community/presentation/create_group_page.dart';
 import 'package:go_glyder/features/community/presentation/group_detail_page.dart';
-import 'package:go_glyder/features/community/presentation/qr_scan_page.dart';
+import 'package:go_glyder/services/firestore_service.dart';
 
+/// School-scoped community: pick one of your schools, browse/search its
+/// groups, and join or open them. Membership is open — no join codes.
 class CommunityPage extends StatefulWidget {
   const CommunityPage({super.key});
 
@@ -14,360 +18,380 @@ class CommunityPage extends StatefulWidget {
 }
 
 class _CommunityPageState extends State<CommunityPage> {
-  final Color darkGreen = const Color(0xFF023020);
-  final Color lightGreen = const Color(0xFF90EE90);
+  final FirestoreService _fs = FirestoreService.instance;
+  final TextEditingController _searchC = TextEditingController();
 
-  final FirestoreService _firestore = FirestoreService.instance;
-  final TextEditingController _newPostController = TextEditingController();
+  String? _selectedSchoolId;
+  String _query = '';
+
+  // The set of group ids the user has already joined (kept live so the
+  // directory can show Join vs Open without an extra read per card).
+  Set<String> _myGroupIds = {};
+  Map<String, String> _mySchoolNames = {}; // id -> name
+  StreamSubscription? _myGroupsSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _myGroupsSub = _fs.streamMyGroups().listen((snap) {
+      if (mounted) {
+        setState(() => _myGroupIds = snap.docs.map((d) => d.id).toSet());
+      }
+    });
+    _searchC.addListener(
+      () => setState(() => _query = _searchC.text.trim().toLowerCase()),
+    );
+  }
 
   @override
   void dispose() {
-    _newPostController.dispose();
+    _myGroupsSub?.cancel();
+    _searchC.dispose();
     super.dispose();
-  }
-
-  String _timeAgo(DateTime? time) {
-    if (time == null) return 'just now';
-    final diff = DateTime.now().difference(time);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  Future<void> _createPost() async {
-    final content = _newPostController.text.trim();
-    if (content.isEmpty) return;
-    final author = FirebaseAuth.instance.currentUser?.email ?? 'Anonymous';
-    await _firestore.createCommunityPost(author: author, content: content);
-    _newPostController.clear();
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  void _showNewPostDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New Post'),
-        content: TextField(
-          controller: _newPostController,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: "What's on your mind?",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: _createPost,
-            style: ElevatedButton.styleFrom(backgroundColor: darkGreen),
-            child: const Text('Post', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        backgroundColor: darkGreen,
-        foregroundColor: Colors.white,
-        title: const Text(
-          'Community',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-          ),
-        ],
+      backgroundColor: AppColors.background,
+      appBar: AppBar(title: const Text('Community')),
+      body: StreamBuilder<List<String>>(
+        stream: _fs.streamMySchoolIds(),
+        builder: (context, schoolSnap) {
+          if (!schoolSnap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final mySchoolIds = schoolSnap.data!;
+          if (mySchoolIds.isEmpty) return _noSchoolView();
+
+          // Default the selector to the first joined school.
+          final selected = (_selectedSchoolId != null &&
+                  mySchoolIds.contains(_selectedSchoolId))
+              ? _selectedSchoolId!
+              : mySchoolIds.first;
+
+          return Column(
+            children: [
+              _schoolChips(mySchoolIds, selected),
+              _searchBar(),
+              Expanded(child: _directory(selected)),
+            ],
+          );
+        },
       ),
-      body: SingleChildScrollView(
+    );
+  }
+
+  // ---- No school yet ----
+  Widget _noSchoolView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHeader(),
-            _buildMyGroups(),
-            _buildCommunityFeed(),
+            const Icon(Icons.school_rounded, size: 64, color: AppColors.brandGreen),
+            const SizedBox(height: 16),
+            const Text(
+              'Join your school',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Groups, carpools, and the calendar all live under your school. '
+              'Join one to get started.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              height: 50,
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _joinSchoolFlow,
+                icon: const Icon(Icons.add),
+                label: const Text('Join a school'),
+              ),
+            ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showNewPostDialog,
-        backgroundColor: darkGreen,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Post', style: TextStyle(color: Colors.white)),
+    );
+  }
+
+  // ---- School selector chips ----
+  Widget _schoolChips(List<String> mySchoolIds, String selected) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _fs.streamSchools(),
+      builder: (context, snap) {
+        _mySchoolNames = {
+          for (final d in snap.data?.docs ?? [])
+            if (mySchoolIds.contains(d.id))
+              d.id: (d.data()['name'] ?? 'School') as String,
+        };
+        return SizedBox(
+          height: 56,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            children: [
+              for (final id in mySchoolIds)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(_mySchoolNames[id] ?? 'School'),
+                    selected: id == selected,
+                    onSelected: (_) => setState(() => _selectedSchoolId = id),
+                    selectedColor: AppColors.brandDark,
+                    labelStyle: TextStyle(
+                      color: id == selected
+                          ? Colors.white
+                          : AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    backgroundColor: AppColors.surface,
+                  ),
+                ),
+              ActionChip(
+                avatar: const Icon(Icons.add, size: 18),
+                label: const Text('Join school'),
+                onPressed: _joinSchoolFlow,
+                backgroundColor: AppColors.surface,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _searchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: TextField(
+        controller: _searchC,
+        decoration: InputDecoration(
+          hintText: 'Search groups…',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => _searchC.clear(),
+                ),
+        ),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: darkGreen,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.people, color: Colors.white, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Connect with Parents',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      'Join carpool groups and share rides',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
+  // ---- Group directory for the selected school ----
+  Widget _directory(String schoolId) {
+    final schoolName = _mySchoolNames[schoolId];
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _fs.streamGroupsInSchool(schoolId),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final all = snap.data!.docs;
+        final groups = _query.isEmpty
+            ? all
+            : all
+                  .where(
+                    (d) => ((d.data()['name'] ?? '') as String)
+                        .toLowerCase()
+                        .contains(_query),
+                  )
+                  .toList();
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(Icons.search, color: Colors.white.withOpacity(0.7)),
-                const SizedBox(width: 12),
                 Text(
-                  'Search groups or posts...',
-                  style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  schoolName == null ? 'Groups' : 'Groups at $schoolName',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _createGroup(schoolId, schoolName),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Create'),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 8),
+            if (groups.isEmpty)
+              _emptyDirectory(all.isEmpty)
+            else
+              for (final g in groups) _groupCard(schoolId, schoolName, g),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildMyGroups() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'My Groups',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: darkGreen,
-                ),
-              ),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: _showJoinGroupDialog,
-                    icon: Icon(Icons.vpn_key_outlined, size: 18, color: darkGreen),
-                    label: Text('Join', style: TextStyle(color: darkGreen)),
-                  ),
-                  const SizedBox(width: 4),
-                  ElevatedButton.icon(
-                    onPressed: _showCreateGroupDialog,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Create'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: darkGreen,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      // Override the theme's full-width (infinite) minimumSize;
-                      // this button lives in a Row, which gives unbounded width.
-                      minimumSize: const Size(0, 44),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _firestore.streamMyGroups(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return _groupsNotice('Could not load your groups');
-              }
-              if (!snapshot.hasData) {
-                return const SizedBox(
-                  height: 120,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final docs = snapshot.data!.docs;
-              if (docs.isEmpty) return _emptyGroups();
-              return SizedBox(
-                height: 140,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final data = docs[index].data();
-                    final id = docs[index].id;
-                    final name = (data['name'] ?? '') as String;
-                    return GestureDetector(
-                      onTap: () => _openGroup(id, name),
-                      child: Container(
-                        width: 160,
-                        margin: const EdgeInsets.only(right: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: lightGreen.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                _iconFor(data['icon'] as String?),
-                                color: darkGreen,
-                                size: 24,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: darkGreen,
-                                fontSize: 14,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Tap to view · invite',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _groupsNotice(String text) {
-    return SizedBox(
-      height: 120,
-      child: Center(
-        child: Text(text, style: TextStyle(color: Colors.grey[600])),
-      ),
-    );
-  }
-
-  Widget _emptyGroups() {
+  Widget _emptyDirectory(bool noneAtAll) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
       ),
       child: Column(
         children: [
-          Icon(Icons.groups_outlined, size: 40, color: darkGreen),
-          const SizedBox(height: 12),
+          const Icon(Icons.groups_outlined,
+              size: 40, color: AppColors.brandGreen),
+          const SizedBox(height: 10),
           Text(
-            'You haven\'t joined any groups yet',
-            style: TextStyle(fontWeight: FontWeight.bold, color: darkGreen),
+            noneAtAll
+                ? 'No groups at this school yet'
+                : 'No groups match your search',
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 4),
           Text(
-            'Create a carpool group or join one with a code',
+            noneAtAll
+                ? 'Be the first — create one for your team, class, or club.'
+                : 'Try a different search, or create a new group.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              OutlinedButton(
-                onPressed: _showJoinGroupDialog,
-                child: Text('Join with code', style: TextStyle(color: darkGreen)),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: _showCreateGroupDialog,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: darkGreen,
-                  foregroundColor: Colors.white,
-                  // Bound the width — this button is inside a Row (the theme's
-                  // default minimumSize forces infinite width otherwise).
-                  minimumSize: const Size(0, 44),
-                ),
-                child: const Text('Create group'),
-              ),
-            ],
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
         ],
       ),
     );
+  }
+
+  Widget _groupCard(
+    String schoolId,
+    String? schoolName,
+    QueryDocumentSnapshot<Map<String, dynamic>> g,
+  ) {
+    final data = g.data();
+    final name = (data['name'] ?? 'Group') as String;
+    final members = (data['members'] ?? 0) as int;
+    final category = (data['category'] ?? '') as String;
+    final joined = _myGroupIds.contains(g.id);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        onTap: () => _openGroup(schoolId, g.id, name, schoolName),
+        leading: CircleAvatar(
+          backgroundColor: AppColors.brandTint,
+          child: Icon(_iconFor(data['icon'] as String?),
+              color: AppColors.brandDark),
+        ),
+        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(
+          '$members member${members == 1 ? '' : 's'}'
+          '${category.isEmpty ? '' : ' · ${_categoryLabel(category)}'}',
+        ),
+        trailing: joined
+            ? const Chip(
+                label: Text('Joined'),
+                backgroundColor: AppColors.brandTint,
+                labelStyle: TextStyle(
+                  color: AppColors.brandDark,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+                visualDensity: VisualDensity.compact,
+              )
+            : ElevatedButton(
+                style: ElevatedButton.styleFrom(minimumSize: const Size(0, 38)),
+                onPressed: () => _joinGroup(schoolId, g.id, name, data),
+                child: const Text('Join'),
+              ),
+      ),
+    );
+  }
+
+  // ---- Actions ----
+  Future<void> _joinSchoolFlow() async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _SchoolPickerSheet(),
+    );
+    if (chosen == null) return;
+    try {
+      await _fs.joinSchool(chosen);
+      if (mounted) setState(() => _selectedSchoolId = chosen);
+    } catch (_) {
+      _notify('Could not join that school.');
+    }
+  }
+
+  Future<void> _joinGroup(
+    String schoolId,
+    String groupId,
+    String name,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      await _fs.joinGroup(
+        schoolId: schoolId,
+        groupId: groupId,
+        groupName: name,
+        icon: (data['icon'] ?? 'sun') as String,
+      );
+      _notify('Joined $name!');
+    } on GroupException catch (e) {
+      _notify(e.message);
+    } catch (_) {
+      _notify('Could not join the group.');
+    }
+  }
+
+  Future<void> _createGroup(String schoolId, String? schoolName) async {
+    final result = await Navigator.of(context).push<(String, String)>(
+      MaterialPageRoute(
+        builder: (_) =>
+            CreateGroupPage(schoolId: schoolId, schoolName: schoolName),
+      ),
+    );
+    if (result != null && mounted) {
+      _openGroup(schoolId, result.$1, result.$2, schoolName);
+    }
+  }
+
+  void _openGroup(
+    String schoolId,
+    String groupId,
+    String name,
+    String? schoolName,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GroupDetailPage(
+          schoolId: schoolId,
+          groupId: groupId,
+          groupName: name,
+          schoolName: schoolName,
+        ),
+      ),
+    );
+  }
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   IconData _iconFor(String? key) {
@@ -387,270 +411,86 @@ class _CommunityPageState extends State<CommunityPage> {
     }
   }
 
-  void _openGroup(String id, String name) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GroupDetailPage(groupId: id, groupName: name),
-      ),
-    );
-  }
-
-  Future<void> _showCreateGroupDialog() async {
-    // Full-screen form (school name, category, area, etc.). Returns
-    // (groupId, name) on success, or null if the user backs out.
-    final result = await Navigator.of(context).push<(String, String)>(
-      MaterialPageRoute(builder: (_) => const CreateGroupPage()),
-    );
-    if (result != null && mounted) {
-      _openGroup(result.$1, result.$2);
+  String _categoryLabel(String key) {
+    switch (key) {
+      case 'morning':
+        return 'Morning drop-off';
+      case 'afterschool':
+        return 'After-school';
+      case 'sports':
+        return 'Sports';
+      case 'music':
+        return 'Music & Arts';
+      case 'events':
+        return 'Events & trips';
+      default:
+        return 'General';
     }
-  }
-
-  Future<void> _showJoinGroupDialog() async {
-    final codeC = TextEditingController();
-    final action = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Join a Group'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: codeC,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                labelText: 'Join code',
-                hintText: 'e.g. K7P2QX',
-              ),
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).pop('scan'),
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Scan QR code instead'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: darkGreen,
-                minimumSize: const Size.fromHeight(44),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: darkGreen,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(context).pop('code'),
-            child: const Text('Join'),
-          ),
-        ],
-      ),
-    );
-
-    if (action == 'scan') {
-      await _scanToJoin();
-    } else if (action == 'code') {
-      try {
-        final name = await _firestore.joinGroupByCode(codeC.text);
-        _notify('Joined $name!');
-      } on GroupException catch (e) {
-        _notify(e.message);
-      } catch (_) {
-        _notify('Could not join the group.');
-      }
-    }
-    codeC.dispose();
-  }
-
-  Future<void> _scanToJoin() async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QrScanPage()),
-    );
-    if (result != null) _notify(result);
-  }
-
-  void _notify(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Widget _buildCommunityFeed() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Community Feed',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: darkGreen,
-            ),
-          ),
-          const SizedBox(height: 16),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _firestore.streamCommunityPosts(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('Could not load posts'),
-                );
-              }
-              if (!snapshot.hasData) {
-                return const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final docs = snapshot.data!.docs;
-              if (docs.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'No posts yet. Be the first to share!',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                );
-              }
-              return Column(
-                children: docs.map((doc) {
-                  final data = doc.data();
-                  final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-                  final post = CommunityPost(
-                    author: data['author'] ?? 'Anonymous',
-                    content: data['content'] ?? '',
-                    timeAgo: _timeAgo(createdAt),
-                    likes: data['likes'] ?? 0,
-                    comments: data['comments'] ?? 0,
-                  );
-                  return _buildPostCard(post, doc.id);
-                }).toList(),
-              );
-            },
-          ),
-          const SizedBox(height: 80),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPostCard(CommunityPost post, String postId) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: lightGreen.withOpacity(0.3),
-                child: Text(
-                  post.author[0],
-                  style: TextStyle(
-                    color: darkGreen,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      post.author,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: darkGreen,
-                      ),
-                    ),
-                    Text(
-                      post.timeAgo,
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.more_horiz, color: Colors.grey[400]),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            post.content,
-            style: TextStyle(
-              color: Colors.grey[800],
-              fontSize: 15,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => _firestore.likePost(postId),
-                child: Icon(
-                  Icons.favorite_border,
-                  color: Colors.grey[500],
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${post.likes}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
-              ),
-              const SizedBox(width: 20),
-              Icon(
-                Icons.chat_bubble_outline,
-                color: Colors.grey[500],
-                size: 20,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${post.comments}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
-              ),
-              const Spacer(),
-              Icon(Icons.share_outlined, color: Colors.grey[500], size: 20),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 }
 
-class CommunityPost {
-  final String author;
-  final String content;
-  final String timeAgo;
-  final int likes;
-  final int comments;
+/// Bottom sheet listing every school so a user can join one (no code needed).
+class _SchoolPickerSheet extends StatelessWidget {
+  const _SchoolPickerSheet();
 
-  CommunityPost({
-    required this.author,
-    required this.content,
-    required this.timeAgo,
-    required this.likes,
-    required this.comments,
-  });
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('Join a school',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirestoreService.instance.streamSchools(),
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final schools = snap.data!.docs;
+              if (schools.isEmpty) {
+                return Text(
+                  'No schools are set up yet. Ask your school to onboard '
+                  'with GoGlyder.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                );
+              }
+              return Column(
+                children: [
+                  for (final s in schools)
+                    ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: AppColors.brandTint,
+                        child: Icon(Icons.school_rounded,
+                            color: AppColors.brandDark),
+                      ),
+                      title: Text((s.data()['name'] ?? 'School') as String,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      onTap: () => Navigator.of(context).pop(s.id),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }

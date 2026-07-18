@@ -50,13 +50,7 @@ class AnalyticsPage extends StatelessWidget {
                   color: const Color(0xFF7C3AED),
                   stream: firestore.streamMyConversations(),
                 ),
-                _CountTile(
-                  icon: Icons.event_available_rounded,
-                  label: 'Upcoming Events',
-                  color: const Color(0xFFB45309),
-                  stream: firestore.streamCalendarEvents(),
-                  counter: _upcomingCount,
-                ),
+                _SchoolsTile(),
               ],
             ),
             const SizedBox(height: 28),
@@ -67,15 +61,6 @@ class AnalyticsPage extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static int _upcomingCount(QuerySnapshot<Map<String, dynamic>> snap) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return snap.docs.where((d) {
-      final ts = d.data()['date'] as Timestamp?;
-      return ts != null && !ts.toDate().isBefore(today);
-    }).length;
   }
 
   Widget _buildCarbonComingSoon() {
@@ -144,14 +129,12 @@ class _CountTile extends StatelessWidget {
   final String label;
   final Color color;
   final Stream<QuerySnapshot<Map<String, dynamic>>> stream;
-  final int Function(QuerySnapshot<Map<String, dynamic>>)? counter;
 
   const _CountTile({
     required this.icon,
     required this.label,
     required this.color,
     required this.stream,
-    this.counter,
   });
 
   @override
@@ -180,8 +163,7 @@ class _CountTile extends StatelessWidget {
             builder: (context, snapshot) {
               final value = !snapshot.hasData
                   ? '—'
-                  : (counter?.call(snapshot.data!) ?? snapshot.data!.docs.length)
-                        .toString();
+                  : snapshot.data!.docs.length.toString();
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -201,6 +183,58 @@ class _CountTile extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Stat card counting the schools the user belongs to (its stream is a
+/// List<String>, not a QuerySnapshot, so it needs its own tile).
+class _SchoolsTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFFB45309);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: AppRadius.smAll,
+            ),
+            child: const Icon(Icons.school_rounded, color: color, size: 22),
+          ),
+          StreamBuilder<List<String>>(
+            stream: FirestoreService.instance.streamMySchoolIds(),
+            builder: (context, snap) {
+              final value = snap.hasData ? '${snap.data!.length}' : '—';
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(value,
+                      style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary)),
+                  const Text('Schools',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600)),
                 ],
               );
             },

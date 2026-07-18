@@ -21,10 +21,12 @@ const List<_Category> _categories = [
   _Category('General', 'general', 'group', Icons.groups_rounded),
 ];
 
-/// Full-screen form for creating a carpool group. Returns `(groupId, name)` on
-/// success, or `null` if the user backs out.
+/// Full-screen form for creating a carpool group within a school. Returns
+/// `(groupId, name)` on success, or `null` if the user backs out.
 class CreateGroupPage extends StatefulWidget {
-  const CreateGroupPage({super.key});
+  final String schoolId;
+  final String? schoolName;
+  const CreateGroupPage({super.key, required this.schoolId, this.schoolName});
 
   @override
   State<CreateGroupPage> createState() => _CreateGroupPageState();
@@ -33,7 +35,6 @@ class CreateGroupPage extends StatefulWidget {
 class _CreateGroupPageState extends State<CreateGroupPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameC = TextEditingController();
-  final _schoolC = TextEditingController();
   final _areaC = TextEditingController();
   final _descC = TextEditingController();
 
@@ -43,7 +44,6 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   @override
   void dispose() {
     _nameC.dispose();
-    _schoolC.dispose();
     _areaC.dispose();
     _descC.dispose();
     super.dispose();
@@ -57,8 +57,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
     try {
       final name = _nameC.text.trim();
       final id = await FirestoreService.instance.createGroup(
+        schoolId: widget.schoolId,
         name: name,
-        schoolName: _schoolC.text.trim(),
         description: _descC.text.trim(),
         category: _category.key,
         icon: _category.icon,
@@ -90,27 +90,42 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (widget.schoolName != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.brandTint,
+                  borderRadius: AppRadius.mdAll,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.school_rounded,
+                        size: 18, color: AppColors.brandDark),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'New group at ${widget.schoolName}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.brandDark,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
             _label('Group name'),
             TextFormField(
               controller: _nameC,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
-                hintText: 'e.g. Oakwood Morning Riders',
+                hintText: 'e.g. Basketball Team, 5th Grade',
               ),
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter a group name' : null,
-            ),
-            const SizedBox(height: 18),
-            _label('School'),
-            TextFormField(
-              controller: _schoolC,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                hintText: 'Which school is this group for?',
-                prefixIcon: Icon(Icons.school_outlined),
-              ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Enter the school name' : null,
             ),
             const SizedBox(height: 18),
             _label('Type of carpool'),
@@ -154,7 +169,8 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'You\'ll get a join code and QR to share with other parents.',
+              'Anyone at your school can find and join this group from the '
+              'directory.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
             ),

@@ -14,6 +14,7 @@ class Session extends ChangeNotifier {
   User? _user;
   String? _role;
   String? _adminSchoolId;
+  List<String> _schools = const [];
   bool _profileLoaded = false;
 
   StreamSubscription<User?>? _authSub;
@@ -26,6 +27,7 @@ class Session extends ChangeNotifier {
   User? get user => _user;
   String? get role => _role;
   String? get adminSchoolId => _adminSchoolId;
+  List<String> get schools => _schools;
   bool get isLoggedIn => _user != null;
 
   /// True until we've read the signed-in user's profile doc at least once.
@@ -40,6 +42,7 @@ class Session extends ChangeNotifier {
     _profileSub?.cancel();
     _role = null;
     _adminSchoolId = null;
+    _schools = const [];
     _profileLoaded = false;
     notifyListeners();
 
@@ -53,6 +56,8 @@ class Session extends ChangeNotifier {
           (doc) {
             _role = doc.data()?['role'] as String?;
             _adminSchoolId = doc.data()?['adminSchoolId'] as String?;
+            _schools =
+                (doc.data()?['schools'] as List?)?.cast<String>() ?? const [];
             _profileLoaded = true;
             notifyListeners();
           },

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/features/admin/presentation/admin_calendar_page.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 
 /// School admin overview. Access is gated on verified membership of the
@@ -34,6 +35,8 @@ class AdminDashboardPage extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 children: [
                   _header(name),
+                  const SizedBox(height: 18),
+                  _calendarCard(context, name),
                   const SizedBox(height: 22),
                   const _SectionLabel('Usage at a glance'),
                   const SizedBox(height: 12),
@@ -118,29 +121,65 @@ class AdminDashboardPage extends StatelessWidget {
     );
   }
 
+  Widget _calendarCard(BuildContext context, String schoolName) {
+    return Material(
+      color: AppColors.brandGreen,
+      borderRadius: AppRadius.lgAll,
+      child: InkWell(
+        borderRadius: AppRadius.lgAll,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                AdminCalendarPage(schoolId: schoolId, schoolName: schoolName),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_month_rounded, color: Colors.white),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('School calendar',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16)),
+                    Text('Upload your calendar (.ics) for the whole community',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: Colors.white, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _statsGrid() {
     return GridView.count(
-      crossAxisCount: 3,
+      crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 0.95,
+      childAspectRatio: 1.4,
       children: [
         _StatTile(
           icon: Icons.groups_rounded,
           label: 'Groups',
-          stream: _fs.streamCarpoolGroups(),
+          stream: _fs.streamGroupsInSchool(schoolId),
         ),
         _StatTile(
           icon: Icons.forum_rounded,
           label: 'Posts',
           stream: _fs.streamCommunityPosts(),
-        ),
-        _StatTile(
-          icon: Icons.event_rounded,
-          label: 'Events',
-          stream: _fs.streamCalendarEvents(),
         ),
       ],
     );
@@ -148,7 +187,7 @@ class AdminDashboardPage extends StatelessWidget {
 
   Widget _groupsList() {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _fs.streamCarpoolGroups(),
+      stream: _fs.streamGroupsInSchool(schoolId),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -183,8 +222,7 @@ class AdminDashboardPage extends StatelessWidget {
                     title: Text((docs[i].data()['name'] ?? 'Group') as String,
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
-                        '${docs[i].data()['members'] ?? 0} members · '
-                        '${docs[i].data()['schoolName'] ?? ''}'),
+                        '${docs[i].data()['members'] ?? 0} members'),
                   ),
                 ),
             ],

@@ -286,11 +286,22 @@ class NewMessagePage extends StatelessWidget {
               'members here.',
             );
           }
+          // Groups without a schoolId are pre-school-scoping leftovers; skip.
+          final scoped = groups
+              .where((g) => (g.data()['schoolId'] as String?) != null)
+              .toList();
+          if (scoped.isEmpty) {
+            return const _CenterNote(
+              'Join or create a carpool group first — you can message its '
+              'members here.',
+            );
+          }
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            children: groups.map((g) {
+            children: scoped.map((g) {
               final groupName = (g.data()['name'] ?? 'Group') as String;
               return _GroupMembersSection(
+                schoolId: g.data()['schoolId'] as String,
                 groupId: g.id,
                 groupName: groupName,
                 myUid: myUid,
@@ -305,12 +316,14 @@ class NewMessagePage extends StatelessWidget {
 }
 
 class _GroupMembersSection extends StatelessWidget {
+  final String schoolId;
   final String groupId;
   final String groupName;
   final String? myUid;
   final ValueChanged<_Member> onPick;
 
   const _GroupMembersSection({
+    required this.schoolId,
     required this.groupId,
     required this.groupName,
     required this.myUid,
@@ -335,7 +348,10 @@ class _GroupMembersSection extends StatelessWidget {
           ),
         ),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirestoreService.instance.streamGroupMembers(groupId),
+          stream: FirestoreService.instance.streamGroupMembers(
+            schoolId,
+            groupId,
+          ),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return const SizedBox.shrink();
             final members = snapshot.data!.docs

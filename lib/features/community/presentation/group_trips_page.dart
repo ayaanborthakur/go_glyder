@@ -9,12 +9,14 @@ import 'package:go_glyder/services/firestore_service.dart';
 /// Carpool trips for a single group: the feed of posted rides, plus the
 /// request/accept matching flow.
 class GroupTripsPage extends StatelessWidget {
+  final String schoolId;
   final String groupId;
   final String groupName;
   final String? schoolName;
 
   const GroupTripsPage({
     super.key,
+    required this.schoolId,
     required this.groupId,
     required this.groupName,
     this.schoolName,
@@ -29,14 +31,18 @@ class GroupTripsPage extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => PostRidePage(groupId: groupId, schoolName: schoolName),
+            builder: (_) => PostRidePage(
+              schoolId: schoolId,
+              groupId: groupId,
+              schoolName: schoolName,
+            ),
           ),
         ),
         icon: const Icon(Icons.add),
         label: const Text('Post a ride'),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _fs.streamGroupTrips(groupId),
+        stream: _fs.streamGroupTrips(schoolId, groupId),
         builder: (context, snap) {
           if (snap.hasError) {
             return const Center(child: Text('Could not load rides'));
@@ -50,6 +56,7 @@ class GroupTripsPage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             itemCount: trips.length,
             itemBuilder: (context, i) => _TripCard(
+              schoolId: schoolId,
               groupId: groupId,
               tripId: trips[i].id,
               data: trips[i].data(),
@@ -86,11 +93,13 @@ class GroupTripsPage extends StatelessWidget {
 }
 
 class _TripCard extends StatelessWidget {
+  final String schoolId;
   final String groupId;
   final String tripId;
   final Map<String, dynamic> data;
 
   const _TripCard({
+    required this.schoolId,
     required this.groupId,
     required this.tripId,
     required this.data,
@@ -230,7 +239,7 @@ class _TripCard extends StatelessWidget {
     }
     // Non-driver, not yet a rider: reflect their request status.
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: _fs.streamMyTripRequest(groupId, tripId),
+      stream: _fs.streamMyTripRequest(schoolId, groupId, tripId),
       builder: (context, snap) {
         final reqStatus = snap.data?.data()?['status'] as String?;
         if (reqStatus == 'pending') {
@@ -246,7 +255,7 @@ class _TripCard extends StatelessWidget {
           style: ElevatedButton.styleFrom(minimumSize: const Size(0, 40)),
           onPressed: () async {
             try {
-              await _fs.requestSeat(groupId, tripId);
+              await _fs.requestSeat(schoolId, groupId, tripId);
             } catch (_) {}
           },
           child: const Text('Request seat'),
@@ -263,7 +272,8 @@ class _TripCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _RequestsSheet(groupId: groupId, tripId: tripId),
+      builder: (_) =>
+          _RequestsSheet(schoolId: schoolId, groupId: groupId, tripId: tripId),
     );
   }
 }
@@ -289,9 +299,14 @@ class _Chip extends StatelessWidget {
 
 /// Bottom sheet where the driver accepts/declines pending seat requests.
 class _RequestsSheet extends StatelessWidget {
+  final String schoolId;
   final String groupId;
   final String tripId;
-  const _RequestsSheet({required this.groupId, required this.tripId});
+  const _RequestsSheet({
+    required this.schoolId,
+    required this.groupId,
+    required this.tripId,
+  });
 
   FirestoreService get _fs => FirestoreService.instance;
 
@@ -317,7 +332,7 @@ class _RequestsSheet extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _fs.streamTripRequests(groupId, tripId),
+            stream: _fs.streamTripRequests(schoolId, groupId, tripId),
             builder: (context, snap) {
               if (!snap.hasData) {
                 return const Padding(
@@ -362,6 +377,7 @@ class _RequestsSheet extends StatelessWidget {
                         IconButton(
                           icon: const Icon(Icons.close_rounded, color: AppColors.danger),
                           onPressed: () => _fs.respondToRequest(
+                            schoolId: schoolId,
                             groupId: groupId,
                             tripId: tripId,
                             riderId: r.id,
@@ -372,6 +388,7 @@ class _RequestsSheet extends StatelessWidget {
                           icon: const Icon(Icons.check_circle_rounded,
                               color: AppColors.success),
                           onPressed: () => _fs.respondToRequest(
+                            schoolId: schoolId,
                             groupId: groupId,
                             tripId: tripId,
                             riderId: r.id,
