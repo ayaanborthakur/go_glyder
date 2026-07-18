@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/services/firestore_service.dart';
+import 'package:go_glyder/services/messages_fs.dart';
 
 /// Live community dashboard. Every number is computed from real Firestore
 /// data, so a brand-new account starts at zero and the figures grow with use.
@@ -44,12 +45,7 @@ class AnalyticsPage extends StatelessWidget {
                   color: const Color(0xFF0E7490),
                   stream: firestore.streamCommunityPosts(),
                 ),
-                _CountTile(
-                  icon: Icons.chat_bubble_rounded,
-                  label: 'Conversations',
-                  color: const Color(0xFF7C3AED),
-                  stream: firestore.streamMyConversations(),
-                ),
+                const _ConvCountTile(),
                 _CountTile(
                   icon: Icons.event_available_rounded,
                   label: 'Upcoming Events',
@@ -196,6 +192,70 @@ class _CountTile extends StatelessWidget {
                   Text(
                     label,
                     style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Stat card that shows the number of the current user's conversations.
+/// Uses the typed [MessagingService] stream instead of a raw QuerySnapshot.
+class _ConvCountTile extends StatelessWidget {
+  const _ConvCountTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+              borderRadius: AppRadius.smAll,
+            ),
+            child: const Icon(
+              Icons.chat_bubble_rounded,
+              color: Color(0xFF7C3AED),
+              size: 22,
+            ),
+          ),
+          StreamBuilder<List<dynamic>>(
+            stream: MessagingService.instance.streamMyConversations(),
+            builder: (context, snapshot) {
+              final count =
+                  snapshot.hasData ? snapshot.data!.length.toString() : '—';
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    count,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Text(
+                    'Conversations',
+                    style: TextStyle(
                       fontSize: 13,
                       color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600,

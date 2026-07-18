@@ -8,6 +8,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'package:go_glyder/services/notification_service.dart';
+
 /// Web OAuth client ID from android/app/google-services.json (client_type 3).
 /// google_sign_in needs this as the serverClientId so it returns an ID token
 /// whose audience Firebase will accept.
@@ -49,6 +51,9 @@ class AuthService {
         credential,
       );
       await _upsertUserDoc(userCredential.user);
+      if (userCredential.user != null) {
+        await NotificationService.instance.saveTokenForUser(userCredential.user!.uid);
+      }
       return userCredential;
     } on GoogleSignInException catch (e) {
       // User backed out of the picker — not a real error.
@@ -79,6 +84,9 @@ class AuthService {
           : await _firebaseAuth.signInWithProvider(provider);
 
       await _upsertUserDoc(userCredential.user);
+      if (userCredential.user != null) {
+        await NotificationService.instance.saveTokenForUser(userCredential.user!.uid);
+      }
       return userCredential;
     } on FirebaseAuthException catch (e) {
       // Various cancel codes across platforms — treat as a no-op.
@@ -120,6 +128,10 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    final uid = _firebaseAuth.currentUser?.uid;
+    if (uid != null) {
+      await NotificationService.instance.clearTokenForUser(uid);
+    }
     await GoogleSignIn.instance.signOut();
     await _firebaseAuth.signOut();
   }

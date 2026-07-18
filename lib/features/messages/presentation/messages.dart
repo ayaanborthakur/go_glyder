@@ -1,10 +1,22 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+// lib/features/messages/presentation/messages.dart
+//
+// Messages feature — presentation layer only.
+//
+// All data access goes through MessagesController (messages_logic.dart).
+// No direct Firestore or Firebase imports here.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
-import 'package:go_glyder/services/firestore_service.dart';
+import 'package:go_glyder/features/messages/logic/messages_logic.dart';
+import 'package:go_glyder/services/firestore_service.dart'; // for streamMyGroups / streamGroupMembers
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared avatar widget
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Deterministic on-brand avatar gradient so each person keeps a stable color.
 LinearGradient avatarGradient(String name) {
@@ -52,6 +64,10 @@ class Avatar extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Conversations list page
+// ─────────────────────────────────────────────────────────────────────────────
+
 class MessagesPage extends StatefulWidget {
   const MessagesPage({super.key});
 
@@ -60,7 +76,22 @@ class MessagesPage extends StatefulWidget {
 }
 
 class _MessagesPageState extends State<MessagesPage> {
-  final FirestoreService _firestore = FirestoreService.instance;
+  final MessagesController _ctrl = MessagesController.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.subscribeToConversations();
+  }
+
+  @override
+  void dispose() {
+    // Do NOT call unsubscribeFromConversations here — MessagesPage sits inside
+    // MainScreen's persistent BottomNavigationBar, so it should stay live.
+    // If you navigate away entirely (sign-out), handle cleanup in the auth
+    // listener instead.
+    super.dispose();
+  }
 
   Future<void> _startNewMessage() async {
     final picked = await Navigator.of(context).push<_Member>(
@@ -78,7 +109,6 @@ class _MessagesPageState extends State<MessagesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final myUid = _firestore.currentUid;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -90,60 +120,48 @@ class _MessagesPageState extends State<MessagesPage> {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _firestore.streamMyConversations(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const _CenterNote('Could not load conversations');
-          }
-          if (!snapshot.hasData) {
+      body: ListenableBuilder(
+        listenable: _ctrl,
+        builder: (context, _) {
+          if (_ctrl.conversationsLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-          final docs = snapshot.data!.docs.toList()
-            ..sort((a, b) {
-              final ta = a.data()['lastMessageAt'] as Timestamp?;
-              final tb = b.data()['lastMessageAt'] as Timestamp?;
-              return (tb?.millisecondsSinceEpoch ?? 0).compareTo(
-                ta?.millisecondsSinceEpoch ?? 0,
-              );
-            });
-
-          if (docs.isEmpty) return _emptyState();
+          if (_ctrl.conversationsError != null) {
+            return _CenterNote(_ctrl.conversationsError!);
+          }
+          if (_ctrl.conversations.isEmpty) return _emptyState();
 
           return ListView.builder(
             padding: const EdgeInsets.only(top: 12, bottom: 24),
-            itemCount: docs.length,
+            itemCount: _ctrl.conversations.length,
             itemBuilder: (context, i) {
-              final data = docs[i].data();
-              final participants = List<String>.from(
-                data['participants'] ?? const [],
-              );
-              final names = Map<String, dynamic>.from(data['names'] ?? const {});
-              final otherUid = participants.firstWhere(
-                (p) => p != myUid,
-                orElse: () => '',
-              );
-              final otherName = (names[otherUid] ?? 'Member') as String;
-              final lastMessage = (data['lastMessage'] ?? '') as String;
-              final ts = data['lastMessageAt'] as Timestamp?;
+              final conv = _ctrl.conversations[i];
+              final myUid = _ctrl.currentUid ?? '';
+              final otherName = conv.otherName(myUid);
+              final unread = conv.unreadFor(myUid);
 
               return _ConversationTile(
                 name: otherName,
-                lastMessage: lastMessage.isEmpty
+                lastMessage: conv.lastMessage.isEmpty
                     ? 'Say hi to start the conversation'
-                    : lastMessage,
-                time: ts != null ? DateFormat.jm().format(ts.toDate()) : '',
+                    : conv.lastMessage,
+                time: conv.lastMessageAt != null
+                    ? DateFormat.jm().format(conv.lastMessageAt!)
+                    : '',
+                unreadCount: unread,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) =>
-                        ChatDetailPage(otherUid: otherUid, otherName: otherName),
+                    builder: (_) => ChatDetailPage(
+                      otherUid: conv.otherUid(myUid),
+                      otherName: otherName,
+                    ),
                   ),
                 ),
               ).animate(delay: (50 * i).ms).fadeIn(duration: 300.ms).slideX(
-                begin: 0.08,
-                end: 0,
-                curve: Curves.easeOut,
-              );
+                    begin: 0.08,
+                    end: 0,
+                    curve: Curves.easeOut,
+                  );
             },
           );
         },
@@ -187,21 +205,28 @@ class _MessagesPageState extends State<MessagesPage> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Conversation list tile
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _ConversationTile extends StatelessWidget {
   final String name;
   final String lastMessage;
   final String time;
+  final int unreadCount;
   final VoidCallback onTap;
 
   const _ConversationTile({
     required this.name,
     required this.lastMessage,
     required this.time,
+    required this.unreadCount,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasUnread = unreadCount > 0;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -218,9 +243,10 @@ class _ConversationTile extends StatelessWidget {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                        fontWeight:
+                            hasUnread ? FontWeight.w800 : FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
                     ),
@@ -229,23 +255,57 @@ class _ConversationTile extends StatelessWidget {
                       lastMessage,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textSecondary,
+                        fontWeight:
+                            hasUnread ? FontWeight.w600 : FontWeight.w400,
+                        color: hasUnread
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              if (time.isNotEmpty)
-                Text(
-                  time,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (time.isNotEmpty)
+                    Text(
+                      time,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: hasUnread
+                            ? AppColors.brandAccent
+                            : AppColors.textTertiary,
+                        fontWeight:
+                            hasUnread ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  if (hasUnread) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.brandAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        unreadCount > 99 ? '99+' : '$unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -253,6 +313,10 @@ class _ConversationTile extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// New message picker — choose a group member to DM
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// A person the user can start a conversation with (a fellow group member).
 class _Member {
@@ -268,12 +332,12 @@ class NewMessagePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firestore = FirestoreService.instance;
-    final myUid = firestore.currentUid;
+    final myUid = MessagesController.instance.currentUid;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('New Message')),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body: StreamBuilder(
         stream: firestore.streamMyGroups(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
@@ -334,13 +398,12 @@ class _GroupMembersSection extends StatelessWidget {
             ),
           ),
         ),
-        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        StreamBuilder(
           stream: FirestoreService.instance.streamGroupMembers(groupId),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return const SizedBox.shrink();
-            final members = snapshot.data!.docs
-                .where((m) => m.id != myUid)
-                .toList();
+            final members =
+                snapshot.data!.docs.where((m) => m.id != myUid).toList();
             if (members.isEmpty) {
               return const Padding(
                 padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -370,6 +433,10 @@ class _GroupMembersSection extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat detail page
+// ─────────────────────────────────────────────────────────────────────────────
+
 class ChatDetailPage extends StatefulWidget {
   final String otherUid;
   final String otherName;
@@ -384,27 +451,31 @@ class ChatDetailPage extends StatefulWidget {
 }
 
 class _ChatDetailPageState extends State<ChatDetailPage> {
-  final FirestoreService _firestore = FirestoreService.instance;
-  final _controller = TextEditingController();
+  final MessagesController _ctrl = MessagesController.instance;
+  final _textController = TextEditingController();
   final _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    _ctrl.openChat(otherUid: widget.otherUid, otherName: widget.otherName);
+    _ctrl.addListener(_onControllerUpdate);
+  }
+
+  @override
   void dispose() {
-    _controller.dispose();
+    _ctrl.removeListener(_onControllerUpdate);
+    _ctrl.closeChat();
+    _textController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _send() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    _controller.clear();
-    await _firestore.sendDirectMessage(
-      otherUid: widget.otherUid,
-      otherName: widget.otherName,
-      text: text,
-    );
-    _scrollToBottom();
+  void _onControllerUpdate() {
+    // Auto-scroll to the bottom whenever new messages arrive.
+    if (_ctrl.activeMessages.isNotEmpty) {
+      _scrollToBottom();
+    }
   }
 
   void _scrollToBottom() {
@@ -419,10 +490,20 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     });
   }
 
+  Future<void> _send() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+    _textController.clear();
+    await _ctrl.sendMessage(
+      otherUid: widget.otherUid,
+      otherName: widget.otherName,
+      text: text,
+    );
+    _scrollToBottom();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final convId = _firestore.conversationIdFor(widget.otherUid);
-    final myUid = _firestore.currentUid;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -442,41 +523,51 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           ],
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _firestore.streamConversationMessages(convId),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final msgs = snapshot.data!.docs;
-                if (msgs.isEmpty) return _emptyState();
-                WidgetsBinding.instance.addPostFrameCallback(
-                  (_) => _scrollToBottom(),
-                );
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: msgs.length,
-                  itemBuilder: (context, i) {
-                    final data = msgs[i].data();
-                    final isUser = data['senderId'] == myUid;
-                    final ts = data['timestamp'] as Timestamp?;
-                    return _bubble(
-                      (data['text'] ?? '') as String,
-                      isUser,
-                      ts?.toDate(),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          _inputBar(),
-        ],
+      body: ListenableBuilder(
+        listenable: _ctrl,
+        builder: (context, _) {
+          return Column(
+            children: [
+              // Error banner
+              if (_ctrl.messagesError != null)
+                _ErrorBanner(
+                  message: _ctrl.messagesError!,
+                  onDismiss: _ctrl.clearError,
+                ),
+              Expanded(child: _buildMessageList()),
+              _inputBar(),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildMessageList() {
+    if (_ctrl.messagesLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final msgs = _ctrl.activeMessages;
+    if (msgs.isEmpty) return _emptyState();
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      itemCount: msgs.length,
+      itemBuilder: (context, i) {
+        final msg = msgs[i];
+        final isMe = msg.senderId == _ctrl.currentUid;
+        return _bubble(
+          text: msg.isDeleted ? 'This message was deleted' : msg.text,
+          isUser: isMe,
+          isDeleted: msg.isDeleted,
+          time: msg.timestamp,
+          messageId: msg.id,
+          convId: _ctrl.activeChatConvId ?? '',
+          senderId: msg.senderId,
+        );
+      },
     );
   }
 
@@ -501,53 +592,97 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     );
   }
 
-  Widget _bubble(String text, bool isUser, DateTime? time) {
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.72,
-        ),
-        decoration: BoxDecoration(
-          gradient: isUser
-              ? const LinearGradient(
-                  colors: [AppColors.brandGreen, AppColors.brandDark],
-                )
-              : null,
-          color: isUser ? null : AppColors.surface,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isUser ? 18 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 18),
+  Widget _bubble({
+    required String text,
+    required bool isUser,
+    required bool isDeleted,
+    required DateTime? time,
+    required String messageId,
+    required String convId,
+    required String senderId,
+  }) {
+    return GestureDetector(
+      // Long-press to delete (sender only, non-deleted messages)
+      onLongPress: isUser && !isDeleted && convId.isNotEmpty
+          ? () => _confirmDelete(convId, messageId)
+          : null,
+      child: Align(
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.72,
           ),
-          boxShadow: isUser ? null : kCardShadow,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              text,
-              style: TextStyle(
-                color: isUser ? Colors.white : AppColors.textPrimary,
-                fontSize: 15,
-                height: 1.3,
-              ),
+          decoration: BoxDecoration(
+            gradient: isUser && !isDeleted
+                ? const LinearGradient(
+                    colors: [AppColors.brandGreen, AppColors.brandDark],
+                  )
+                : null,
+            color: isUser && !isDeleted ? null : AppColors.surface,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(isUser ? 18 : 4),
+              bottomRight: Radius.circular(isUser ? 4 : 18),
             ),
-            const SizedBox(height: 3),
-            Text(
-              time != null ? DateFormat.jm().format(time) : 'now',
-              style: TextStyle(
-                fontSize: 10.5,
-                color: isUser ? Colors.white70 : AppColors.textTertiary,
+            boxShadow: isUser ? null : kCardShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                text,
+                style: TextStyle(
+                  color: isDeleted
+                      ? AppColors.textTertiary
+                      : (isUser ? Colors.white : AppColors.textPrimary),
+                  fontSize: 15,
+                  height: 1.3,
+                  fontStyle:
+                      isDeleted ? FontStyle.italic : FontStyle.normal,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                time != null ? DateFormat.jm().format(time) : 'now',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: isUser ? Colors.white70 : AppColors.textTertiary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ).animate().fadeIn(duration: 250.ms).slideY(begin: 0.15, end: 0);
+  }
+
+  Future<void> _confirmDelete(String convId, String messageId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete message'),
+        content: const Text('This message will be marked as deleted for everyone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _ctrl.deleteMessage(convId: convId, messageId: messageId);
+    }
   }
 
   Widget _inputBar() {
@@ -566,9 +701,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         children: [
           Expanded(
             child: TextField(
-              controller: _controller,
+              controller: _textController,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _send(),
+              enabled: !_ctrl.isSending,
               decoration: InputDecoration(
                 hintText: 'Type a message…',
                 fillColor: AppColors.background,
@@ -589,21 +725,32 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           ),
           const SizedBox(width: 10),
           GestureDetector(
-            onTap: _send,
+            onTap: _ctrl.isSending ? null : _send,
             child: Container(
               width: 48,
               height: 48,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.brandAccent, AppColors.brandDark],
-                ),
+              decoration: BoxDecoration(
+                gradient: _ctrl.isSending
+                    ? null
+                    : const LinearGradient(
+                        colors: [AppColors.brandAccent, AppColors.brandDark],
+                      ),
+                color: _ctrl.isSending ? AppColors.divider : null,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.send_rounded,
-                color: Colors.white,
-                size: 22,
-              ),
+              child: _ctrl.isSending
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.brandGreen,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
             ),
           ),
         ],
@@ -611,6 +758,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helper widgets
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _CenterNote extends StatelessWidget {
   final String text;
@@ -626,6 +777,38 @@ class _CenterNote extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(color: AppColors.textSecondary, fontSize: 15),
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  final VoidCallback onDismiss;
+
+  const _ErrorBanner({required this.message, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.danger.withAlpha(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.danger, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.danger, fontSize: 13),
+            ),
+          ),
+          GestureDetector(
+            onTap: onDismiss,
+            child: const Icon(Icons.close, size: 18, color: AppColors.danger),
+          ),
+        ],
       ),
     );
   }

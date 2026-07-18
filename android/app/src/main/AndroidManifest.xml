@@ -3,15 +3,34 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- QR code scanning to join carpool groups -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Android 13+ runtime notification permission -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:label="Go Glyder"
+
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <meta-data android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAFcM1vkIjJ6XbDXIVy-w7ZO01hsvQIftA"/>
 
+        <!-- Default notification channel (Android 8+) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="go_glyder_default" />
+
+        <!-- Monochrome notification tray icon (white on transparent) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+
+        <!-- Brand green notification accent color -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/brand_green" />
+
         <activity
+
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
