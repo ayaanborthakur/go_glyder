@@ -79,6 +79,17 @@ class PlacesService {
     }
   }
 
+  /// Best-effort geocode of a free-text address (e.g. a calendar event's
+  /// location) to a lat/lng. Reuses the autocomplete + details flow so it
+  /// needs only "Places API (New)" — already enabled — rather than a
+  /// separate Geocoding API. Returns null if nothing matches.
+  Future<LatLng?> geocodeAddress(String address) async {
+    if (address.trim().isEmpty) return null;
+    final matches = await searchPlaces(address);
+    if (matches.isEmpty) return null;
+    return getPlaceLatLng(matches.first.placeId);
+  }
+
   /// Resolves a place ID (from [searchPlaces]) to a lat/lng.
   Future<LatLng?> getPlaceLatLng(String placeId) async {
     try {

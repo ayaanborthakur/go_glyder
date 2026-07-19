@@ -116,6 +116,48 @@ class SchoolCalendarService {
     return all;
   }
 
+  /// Every event the current user can see — school-wide calendars PLUS each
+  /// of their groups' own inline events — as one flat list. Shared by the
+  /// Calendar page and the Typesense indexer so both work off the same set.
+  Future<List<CalendarEntry>> fetchAllMyEvents() async {
+    final entries = <CalendarEntry>[];
+    entries.addAll(await fetchMySchoolEvents());
+
+    try {
+      final myGroups = await _fs.streamMyGroups().first;
+      for (final g in myGroups.docs) {
+        final data = g.data();
+        final schoolId = data['schoolId'] as String?;
+        final groupName = (data['name'] ?? 'Group') as String;
+        if (schoolId == null) continue;
+        final groupDoc = await _fs.getGroup(schoolId, g.id);
+        final events = ((groupDoc.data()?['events'] as List?) ?? const [])
+            .cast<Map<String, dynamic>>();
+        for (final e in events) {
+          final date = (e['date'] as Timestamp?)?.toDate();
+          if (date == null) continue;
+          entries.add(
+            CalendarEntry(
+              id: (e['id'] ?? '') as String,
+              title: (e['title'] ?? 'Event') as String,
+              description: '',
+              date: date,
+              time: (e['time'] ?? '') as String,
+              location: (e['location'] ?? '') as String,
+              sourceLabel: groupName,
+              isSchoolWide: false,
+              schoolId: schoolId,
+              groupId: g.id,
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Leave whatever loaded; callers handle an empty/partial list.
+    }
+    return entries;
+  }
+
   /// Returns every event from every calendar uploaded to [schoolId], using
   /// the local cache whenever the version hasn't changed.
   Future<List<CalendarEntry>> fetchSchoolEvents(

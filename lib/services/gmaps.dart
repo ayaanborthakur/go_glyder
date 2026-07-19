@@ -8,6 +8,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/services/school_calendar_service.dart';
+import 'package:go_glyder/services/typesense_service.dart';
 import 'places_service.dart';
 import 'directions_service.dart';
 
@@ -67,6 +69,12 @@ class _MapScreenState extends State<MapScreen> {
   bool _isSearching = false;
   bool _isRoutingLoading = false;
 
+  // --- Calendar-event search (Typesense), driven by the destination field ---
+  Timer? _eventDebounce;
+  List<EventSearchResult> _eventSuggestions = [];
+  bool _isEventSearching = false;
+  bool _isResolvingEvent = false;
+
   static const CameraPosition _kInitialPosition = CameraPosition(
     target: LatLng(
       37.42796133580664,
@@ -112,6 +120,21 @@ class _MapScreenState extends State<MapScreen> {
       });
     });
     _goToCurrentLocation(animate: false, silent: true);
+    _indexCalendarEvents();
+  }
+
+  /// Pushes the user's calendar events into Typesense so the event search bar
+  /// has something to autocomplete against. Fire-and-forget and best-effort:
+  /// if Typesense isn't configured or the network fails, the bar just shows
+  /// no results rather than blocking the map.
+  Future<void> _indexCalendarEvents() async {
+    if (!TypesenseSearchService.instance.isConfigured) return;
+    try {
+      final events = await SchoolCalendarService.instance.fetchAllMyEvents();
+      await TypesenseSearchService.instance.syncEvents(events);
+    } catch (_) {
+      // Non-fatal — search degrades to whatever is already indexed.
+    }
   }
 
   Future<void> _initCustomMarker() async {
@@ -157,6 +180,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _eventDebounce?.cancel();
     _originController.dispose();
     _destinationController.dispose();
     _originFocus.dispose();
@@ -274,6 +298,69 @@ class _MapScreenState extends State<MapScreen> {
         _getDirections();
       }
     }
+  }
+
+  // Debounced Typesense query for calendar events.
+  void _onEventSearchChanged(String query) {
+    _eventDebounce?.cancel();
+    _eventDebounce = Timer(const Duration(milliseconds: 300), () async {
+      if (query.trim().isEmpty) {
+        setState(() {
+          _eventSuggestions = [];
+          _isEventSearching = false;
+        });
+        return;
+      }
+      setState(() => _isEventSearching = true);
+      final results = await TypesenseSearchService.instance.search(query);
+      if (!mounted) return;
+      setState(() {
+        // Only events with an address can become a destination.
+        _eventSuggestions = results.where((e) => e.hasLocation).toList();
+        _isEventSearching = false;
+      });
+    });
+  }
+
+  // Picking an event resolves its address to a point and sets it as the
+  // destination, then routes from the origin (current location by default).
+  Future<void> _selectEvent(EventSearchResult event) async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isResolvingEvent = true;
+      _eventSuggestions = [];
+      // Show the picked event's name in the destination field.
+      _destinationController.text = event.title;
+    });
+
+    final latLng = await _placesService.geocodeAddress(event.location);
+    if (!mounted) return;
+
+    if (latLng == null) {
+      setState(() => _isResolvingEvent = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Couldn\'t find "${event.location}" on the map'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _destinationController.text = event.title;
+      _destinationLabel = event.title;
+      _destinationLatLng = latLng;
+      _route = null;
+      _suggestions = [];
+      _isResolvingEvent = false;
+    });
+
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(CameraPosition(target: latLng, zoom: 15)),
+    );
+
+    // Route immediately: origin is either the chosen origin or current GPS.
+    _getDirections();
   }
 
   void _useCurrentLocationAsOrigin() {
@@ -468,7 +555,14 @@ class _MapScreenState extends State<MapScreen> {
             child: Column(
               children: [
                 _buildSearchCard(),
-                if (_suggestions.isNotEmpty) _buildSuggestionsList(),
+                // Origin uses Places autocomplete; destination uses the
+                // Typesense calendar-event search.
+                if (_activeField == _ActiveField.origin &&
+                    _suggestions.isNotEmpty)
+                  _buildSuggestionsList()
+                else if (_activeField == _ActiveField.destination &&
+                    (_eventSuggestions.isNotEmpty || _isEventSearching))
+                  _buildEventSuggestionsList(),
               ],
             ),
           ),
@@ -498,6 +592,61 @@ class _MapScreenState extends State<MapScreen> {
           ),
           Align(alignment: Alignment.bottomCenter, child: _buildBottomPanel()),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEventSuggestionsList() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      constraints: const BoxConstraints(maxHeight: 260),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
+      ),
+      child: _eventSuggestions.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.all(18),
+              child: Text(
+                _isEventSearching
+                    ? 'Searching events…'
+                    : 'No matching events with an address.',
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 13.5),
+              ),
+            )
+          : ListView.separated(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        itemCount: _eventSuggestions.length,
+        separatorBuilder: (context, index) =>
+            const Divider(height: 1, color: AppColors.divider),
+        itemBuilder: (context, i) {
+          final e = _eventSuggestions[i];
+          final sub = [
+            e.sourceLabel,
+            if (e.time.isNotEmpty) e.time,
+            e.location,
+          ].where((s) => s.trim().isNotEmpty).join(' · ');
+          return ListTile(
+            dense: true,
+            leading:
+                const Icon(Icons.event_rounded, color: AppColors.brandGreen),
+            title: Text(
+              e.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: sub.isEmpty
+                ? null
+                : Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
+            trailing: const Icon(Icons.north_east_rounded,
+                size: 16, color: AppColors.textTertiary),
+            onTap: () => _selectEvent(e),
+          );
+        },
       ),
     );
   }
@@ -652,14 +801,16 @@ class _MapScreenState extends State<MapScreen> {
                         child: TextField(
                           controller: _destinationController,
                           focusNode: _destinationFocus,
-                          onChanged: _onSearchChanged,
+                          // Destination is now a calendar-event search: the
+                          // event's built-in address becomes the map point.
+                          onChanged: _onEventSearchChanged,
                           style: const TextStyle(
                             color: AppColors.textPrimary,
                             fontSize: 14.5,
                             fontWeight: FontWeight.w600,
                           ),
                           decoration: const InputDecoration(
-                            hintText: 'Search destination...',
+                            hintText: 'Search a calendar event...',
                             hintStyle: TextStyle(
                               color: AppColors.textTertiary,
                               fontWeight: FontWeight.normal,
@@ -670,7 +821,19 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ),
                       ),
-                      if (_destinationController.text.isNotEmpty)
+                      if (_isEventSearching || _isResolvingEvent)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.brandGreen,
+                            ),
+                          ),
+                        )
+                      else if (_destinationController.text.isNotEmpty)
                         IconButton(
                           icon: const Icon(
                             Icons.close_rounded,
@@ -683,9 +846,9 @@ class _MapScreenState extends State<MapScreen> {
                               _destinationLatLng = null;
                               _destinationLabel = '';
                               _route = null;
+                              _eventSuggestions = [];
                             });
                             _destinationFocus.requestFocus();
-                            _onSearchChanged('');
                           },
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),

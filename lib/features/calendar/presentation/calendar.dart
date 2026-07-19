@@ -1,10 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/models/calendar_entry.dart';
-import 'package:go_glyder/services/firestore_service.dart';
 import 'package:go_glyder/services/school_calendar_service.dart';
 
 /// One merged calendar across everything the user belongs to: the school-wide
@@ -18,7 +16,6 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
-  final FirestoreService _fs = FirestoreService.instance;
   final SchoolCalendarService _cal = SchoolCalendarService.instance;
 
   DateTime _selectedDate = DateTime.now();
@@ -38,39 +35,9 @@ class _CalendarPageState extends State<CalendarPage> {
     final entries = <CalendarEntry>[];
 
     try {
-      // 1) School-wide calendars for each school the user belongs to.
-      entries.addAll(await _cal.fetchMySchoolEvents());
-
-      // 2) Each group's own inline events. streamMyGroups gives the groups
-      // (with schoolId); we read each group doc once for its events array.
-      final myGroups = await _fs.streamMyGroups().first;
-      for (final g in myGroups.docs) {
-        final data = g.data();
-        final schoolId = data['schoolId'] as String?;
-        final groupName = (data['name'] ?? 'Group') as String;
-        if (schoolId == null) continue;
-        final groupDoc = await _fs.getGroup(schoolId, g.id);
-        final events = ((groupDoc.data()?['events'] as List?) ?? const [])
-            .cast<Map<String, dynamic>>();
-        for (final e in events) {
-          final date = (e['date'] as Timestamp?)?.toDate();
-          if (date == null) continue;
-          entries.add(
-            CalendarEntry(
-              id: (e['id'] ?? '') as String,
-              title: (e['title'] ?? 'Event') as String,
-              description: '',
-              date: date,
-              time: (e['time'] ?? '') as String,
-              location: (e['location'] ?? '') as String,
-              sourceLabel: groupName,
-              isSchoolWide: false,
-              schoolId: schoolId,
-              groupId: g.id,
-            ),
-          );
-        }
-      }
+      // School-wide calendars + each group's own inline events, gathered by
+      // the shared service (same set the map's event search indexes).
+      entries.addAll(await _cal.fetchAllMyEvents());
     } catch (_) {
       // Leave whatever loaded; the UI shows an empty state otherwise.
     }
