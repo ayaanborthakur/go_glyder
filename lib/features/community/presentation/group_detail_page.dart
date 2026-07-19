@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/core/widgets.dart';
+import 'package:go_glyder/core/address_autocomplete.dart';
 import 'package:go_glyder/features/account/presentation/profile_page.dart';
 import 'package:go_glyder/features/community/presentation/group_trips_page.dart';
 import 'package:go_glyder/features/community/presentation/post_ride_page.dart';
@@ -886,7 +888,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     DateTime date = DateTime.now();
     TimeOfDay? time;
 
-    final saved = await showDialog<bool>(
+    final String? formattedTime = await showDialog<String>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setInner) => AlertDialog(
@@ -901,9 +903,8 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                   decoration: const InputDecoration(labelText: 'Title'),
                 ),
                 const SizedBox(height: 10),
-                TextField(
+                AddressAutocompleteField(
                   controller: locC,
-                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Location (optional)',
                   ),
@@ -951,13 +952,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
+              onPressed: () => Navigator.of(context).pop(null),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
                 if (titleC.text.trim().isEmpty) return;
-                Navigator.of(context).pop(true);
+                Navigator.of(context).pop(time?.format(context) ?? 'All Day');
               },
               child: const Text('Add'),
             ),
@@ -966,13 +967,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       ),
     );
 
-    if (saved == true) {
+    if (formattedTime != null) {
       await _fs.addGroupEvent(
         schoolId: widget.schoolId,
         groupId: widget.groupId,
         title: titleC.text.trim(),
         date: date,
-        time: time?.format(context) ?? 'All Day',
+        time: formattedTime,
         location: locC.text.trim(),
       );
     }

@@ -612,6 +612,28 @@ class FirestoreService {
     return _trips(schoolId, groupId).orderBy('date').snapshots();
   }
 
+  /// Fetches all open trips across all groups in a school.
+  Future<List<Map<String, dynamic>>> fetchAllOpenTripsForSchool(String schoolId) async {
+    final groupsSnap = await _groupsCol(schoolId).get();
+    final List<Map<String, dynamic>> allTrips = [];
+    
+    for (final groupDoc in groupsSnap.docs) {
+      final tripsSnap = await _trips(schoolId, groupDoc.id)
+          .where('status', isEqualTo: 'open')
+          .get();
+          
+      for (final tripDoc in tripsSnap.docs) {
+        final data = tripDoc.data();
+        data['id'] = tripDoc.id;
+        data['groupId'] = groupDoc.id;
+        data['schoolId'] = schoolId;
+        data['groupName'] = groupDoc.data()['name'];
+        allTrips.add(data);
+      }
+    }
+    return allTrips;
+  }
+
   Future<String> createTrip({
     required String schoolId,
     required String groupId,
@@ -622,6 +644,10 @@ class FirestoreService {
     required int seats,
     double distanceMiles = 0,
     String notes = '',
+    double? originLat,
+    double? originLng,
+    double? destinationLat,
+    double? destinationLng,
   }) async {
     final uid = _uid;
     if (uid == null) throw GroupException('You must be signed in.');
@@ -633,7 +659,11 @@ class FirestoreService {
       'driverName': driverName,
       'driverPhotoUrl': me?.photoURL,
       'origin': origin,
+      'originLat': originLat,
+      'originLng': originLng,
       'destination': destination,
+      'destinationLat': destinationLat,
+      'destinationLng': destinationLng,
       'date': Timestamp.fromDate(date),
       'time': time,
       'seatsTotal': seats,

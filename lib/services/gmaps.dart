@@ -1,13 +1,19 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'package:go_glyder/core/session.dart';
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/features/community/presentation/post_ride_page.dart';
+import 'package:go_glyder/services/firestore_service.dart';
 import 'package:go_glyder/services/school_calendar_service.dart';
 import 'package:go_glyder/services/typesense_service.dart';
 import 'places_service.dart';
@@ -18,6 +24,23 @@ class MapScreen extends StatefulWidget {
 
   @override
   State<MapScreen> createState() => _MapScreenState();
+}
+
+double _haversineDistance(LatLng p1, LatLng p2) {
+  const R = 3958.8; // Radius of the Earth in miles
+  final dLat = _degreesToRadians(p2.latitude - p1.latitude);
+  final dLon = _degreesToRadians(p2.longitude - p1.longitude);
+  final lat1 = _degreesToRadians(p1.latitude);
+  final lat2 = _degreesToRadians(p2.latitude);
+
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.sin(dLon / 2) * math.sin(dLon / 2) * math.cos(lat1) * math.cos(lat2);
+  final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  return R * c;
+}
+
+double _degreesToRadians(double degrees) {
+  return degrees * math.pi / 180.0;
 }
 
 Future<Position> _determinePosition() async {
@@ -47,7 +70,7 @@ Future<Position> _determinePosition() async {
 }
 
 // Which field the search-suggestions dropdown is currently feeding.
-enum _ActiveField { origin, destination }
+enum _ActiveField { origin, destination, event }
 
 class _MapScreenState extends State<MapScreen> {
   GoogleMapController? _mapController;
@@ -60,8 +83,10 @@ class _MapScreenState extends State<MapScreen> {
     text: 'Current Location',
   );
   final TextEditingController _destinationController = TextEditingController();
+  final TextEditingController _eventController = TextEditingController();
   final FocusNode _originFocus = FocusNode();
   final FocusNode _destinationFocus = FocusNode();
+  final FocusNode _eventFocus = FocusNode();
 
   Timer? _debounce;
   List<PlaceSuggestion> _suggestions = [];
@@ -74,6 +99,10 @@ class _MapScreenState extends State<MapScreen> {
   List<EventSearchResult> _eventSuggestions = [];
   bool _isEventSearching = false;
   bool _isResolvingEvent = false;
+
+  bool _isSearchingRides = false;
+  List<Map<String, dynamic>> _matchingRides = [];
+  Map<String, dynamic>? _selectedRide;
 
   static const CameraPosition _kInitialPosition = CameraPosition(
     target: LatLng(
@@ -116,6 +145,14 @@ class _MapScreenState extends State<MapScreen> {
         if (_destinationFocus.hasFocus) {
           _activeField = _ActiveField.destination;
           _suggestions = [];
+        }
+      });
+    });
+    _eventFocus.addListener(() {
+      setState(() {
+        if (_eventFocus.hasFocus) {
+          _activeField = _ActiveField.event;
+          _eventSuggestions = [];
         }
       });
     });
@@ -183,8 +220,10 @@ class _MapScreenState extends State<MapScreen> {
     _eventDebounce?.cancel();
     _originController.dispose();
     _destinationController.dispose();
+    _eventController.dispose();
     _originFocus.dispose();
     _destinationFocus.dispose();
+    _eventFocus.dispose();
     super.dispose();
   }
 
@@ -296,6 +335,7 @@ class _MapScreenState extends State<MapScreen> {
     if (_originLatLng != null || _originController.text == 'Current Location') {
       if (_destinationLatLng != null) {
         _getDirections();
+        _fetchAndFilterRides();
       }
     }
   }
@@ -329,8 +369,7 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _isResolvingEvent = true;
       _eventSuggestions = [];
-      // Show the picked event's name in the destination field.
-      _destinationController.text = event.title;
+      _eventController.text = event.title;
     });
 
     final latLng = await _placesService.geocodeAddress(event.location);
@@ -347,7 +386,7 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     setState(() {
-      _destinationController.text = event.title;
+      _destinationController.text = event.location;
       _destinationLabel = event.title;
       _destinationLatLng = latLng;
       _route = null;
@@ -361,6 +400,7 @@ class _MapScreenState extends State<MapScreen> {
 
     // Route immediately: origin is either the chosen origin or current GPS.
     _getDirections();
+    _fetchAndFilterRides();
   }
 
   void _useCurrentLocationAsOrigin() {
@@ -394,7 +434,10 @@ class _MapScreenState extends State<MapScreen> {
 
       _route = null;
     });
-    if (_destinationLatLng != null) _getDirections();
+    if (_destinationLatLng != null) {
+      _getDirections();
+      _fetchAndFilterRides();
+    }
   }
 
   Future<void> _goToCurrentLocation({
@@ -501,6 +544,86 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  Future<void> _fetchAndFilterRides() async {
+    final schoolIds = session.schools;
+    if (schoolIds.isEmpty) return;
+    final schoolId = schoolIds.first;
+    
+    setState(() {
+      _isSearchingRides = true;
+      _matchingRides = [];
+      _selectedRide = null;
+    });
+
+    try {
+      final origin = _originLatLng ?? _resolvedCurrentPosition;
+      final dest = _destinationLatLng;
+      if (origin == null || dest == null) return;
+
+      final allTrips = await FirestoreService.instance.fetchAllOpenTripsForSchool(schoolId);
+      final List<Map<String, dynamic>> validRides = [];
+      
+      for (final trip in allTrips) {
+        double? tOrigLat = trip['originLat']?.toDouble();
+        double? tOrigLng = trip['originLng']?.toDouble();
+        double? tDestLat = trip['destinationLat']?.toDouble();
+        double? tDestLng = trip['destinationLng']?.toDouble();
+        
+        // Fallback geocoding if missing
+        if (tOrigLat == null || tOrigLng == null) {
+           final ll = await _placesService.geocodeAddress(trip['origin']);
+           if (ll != null) {
+              tOrigLat = ll.latitude;
+              tOrigLng = ll.longitude;
+           }
+        }
+        if (tDestLat == null || tDestLng == null) {
+           final ll = await _placesService.geocodeAddress(trip['destination']);
+           if (ll != null) {
+              tDestLat = ll.latitude;
+              tDestLng = ll.longitude;
+           }
+        }
+        
+        if (tOrigLat == null || tOrigLng == null || tDestLat == null || tDestLng == null) continue;
+        
+        final tOrig = LatLng(tOrigLat, tOrigLng);
+        final tDest = LatLng(tDestLat, tDestLng);
+        
+        // 1. Filter: Destination within 0.5 miles of requested user destination
+        final distToDest = _haversineDistance(tDest, dest);
+        if (distToDest > 0.5) continue;
+        
+        // 2. Calculate detour penalty
+        final originalDist = _haversineDistance(tOrig, tDest);
+        final pickupDist = _haversineDistance(tOrig, origin);
+        final dropoffDist = _haversineDistance(origin, tDest); 
+        final detour = (pickupDist + dropoffDist) - originalDist;
+        
+        trip['detourMiles'] = detour;
+        trip['tOrig'] = tOrig;
+        trip['tDest'] = tDest;
+        validRides.add(trip);
+      }
+      
+      validRides.sort((a, b) => (a['detourMiles'] as double).compareTo(b['detourMiles'] as double));
+      
+      if (mounted) {
+        setState(() {
+          _matchingRides = validRides;
+        });
+      }
+    } catch (e) {
+      developer.log('Error fetching rides', error: e);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSearchingRides = false;
+        });
+      }
+    }
+  }
+
   LatLngBounds _boundsFor(List<LatLng> points) {
     double minLat = points.first.latitude, maxLat = points.first.latitude;
     double minLng = points.first.longitude, maxLng = points.first.longitude;
@@ -560,9 +683,11 @@ class _MapScreenState extends State<MapScreen> {
                 if (_activeField == _ActiveField.origin &&
                     _suggestions.isNotEmpty)
                   _buildSuggestionsList()
-                else if (_activeField == _ActiveField.destination &&
+                else if (_activeField == _ActiveField.event &&
                     (_eventSuggestions.isNotEmpty || _isEventSearching))
-                  _buildEventSuggestionsList(),
+                  _buildEventSuggestionsList()
+                else if (_destinationLatLng != null && _originLatLng != null)
+                  _buildRidesList(),
               ],
             ),
           ),
@@ -596,9 +721,245 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Widget _buildRidesList() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      width: double.infinity,
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.45),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.lgAll,
+        boxShadow: kCardShadow,
+      ),
+      child: _isSearchingRides
+          ? const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppColors.brandGreen,
+                  ),
+                ),
+              ),
+            )
+          : _matchingRides.isEmpty
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(18),
+                      child: Text('No carpool rides match this route.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13.5)),
+                    ),
+                    _buildPostRideBanner(),
+                  ],
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  itemCount: _matchingRides.length + 1,
+                  separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.divider),
+                  itemBuilder: (context, i) {
+                    if (i == _matchingRides.length) return _buildPostRideBanner();
+                    final trip = _matchingRides[i];
+                    return _buildRideListItem(trip);
+                  },
+                ),
+    );
+  }
+
+  Widget _buildRideListItem(Map<String, dynamic> trip) {
+    final detour = trip['detourMiles'] as double;
+    final date = trip['date'] as Timestamp;
+    final dateStr = DateFormat('EEE, MMM d').format(date.toDate());
+    final timeStr = trip['time'] ?? '';
+    final seatsTaken = trip['seatsTaken'] as int? ?? 0;
+    final seatsTotal = trip['seatsTotal'] as int? ?? 0;
+    final driverName = trip['driverName'] as String? ?? 'Driver';
+    final isFull = seatsTaken >= seatsTotal;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      onTap: () => _selectRide(trip),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              driverName,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+          ),
+          Text(
+            '+${detour.toStringAsFixed(1)} mi detour',
+            style: const TextStyle(
+              color: AppColors.accentOrange,
+              fontWeight: FontWeight.bold,
+              fontSize: 12.5,
+            ),
+          ),
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Text('$dateStr · $timeStr', style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.event_seat_rounded, size: 14, color: isFull ? AppColors.danger : AppColors.brandGreen),
+              const SizedBox(width: 4),
+              Text(
+                '$seatsTaken / $seatsTotal seats',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isFull ? AppColors.danger : AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                height: 32,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    backgroundColor: AppColors.brandDark,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: isFull ? null : () => _requestSeat(trip),
+                  child: const Text('Request Seat', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostRideBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.brandTint.withValues(alpha: 0.5),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(AppRadius.lg),
+          bottomRight: Radius.circular(AppRadius.lg),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Cannot find a ride?',
+            style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.brandDark),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _postOwnRide,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Post your own ride instead'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandGreen,
+              side: const BorderSide(color: AppColors.brandGreen),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestSeat(Map<String, dynamic> trip) async {
+    try {
+      await FirestoreService.instance.requestSeat(
+        trip['schoolId'],
+        trip['groupId'],
+        trip['id'],
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Seat requested!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
+  void _postOwnRide() {
+    final schoolIds = session.schools;
+    if (schoolIds.isEmpty) return;
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PostRidePage(
+          schoolId: schoolIds.first,
+          groupId: '', // Will need user to select group in PostRidePage or handle this
+          initialOrigin: _originController.text == 'Current Location' ? '' : _originController.text,
+          initialDestination: _destinationController.text,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectRide(Map<String, dynamic> trip) async {
+    setState(() {
+      _selectedRide = trip;
+      _isRoutingLoading = true;
+    });
+
+    try {
+      final tOrig = trip['tOrig'] as LatLng;
+      final uOrig = _originLatLng ?? _resolvedCurrentPosition;
+      final uDest = _destinationLatLng;
+      
+      if (uOrig == null || uDest == null) return;
+
+      // We need to fetch 2 routes: DriverStart -> UserStart, and UserStart -> UserEnd
+      final route1 = await _directionsService.getRoute(origin: tOrig, destination: uOrig);
+      final route2 = await _directionsService.getRoute(origin: uOrig, destination: uDest);
+
+      if (!mounted) return;
+
+      if (route1 != null && route2 != null) {
+        final combinedPoints = [...route1.points, ...route2.points];
+        
+        setState(() {
+          _route = DirectionsResult(
+            points: combinedPoints,
+            distanceText: '${trip['detourMiles'].toStringAsFixed(1)} mi extra',
+            durationText: 'Detour Route',
+          );
+        });
+
+        final bounds = _boundsFor([tOrig, uOrig, uDest, ...combinedPoints]);
+        _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load the detour route.')),
+        );
+      }
+    } catch (e) {
+      developer.log('Error routing detour', error: e);
+    } finally {
+      if (mounted) {
+        setState(() => _isRoutingLoading = false);
+      }
+    }
+  }
+
   Widget _buildEventSuggestionsList() {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 260),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -690,7 +1051,31 @@ class _MapScreenState extends State<MapScreen> {
                 const SizedBox(height: 3),
                 Column(
                   children: List.generate(
-                    4,
+                    2,
+                    (index) => Container(
+                      margin: const EdgeInsets.symmetric(vertical: 1.5),
+                      width: 2,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.divider,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.brandDark,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Column(
+                  children: List.generate(
+                    2,
                     (index) => Container(
                       margin: const EdgeInsets.symmetric(vertical: 1.5),
                       width: 2,
@@ -732,7 +1117,7 @@ class _MapScreenState extends State<MapScreen> {
                             fontWeight: FontWeight.w600,
                           ),
                           decoration: const InputDecoration(
-                            hintText: 'Current Location',
+                            hintText: 'Starting Location',
                             hintStyle: TextStyle(
                               color: AppColors.textTertiary,
                               fontWeight: FontWeight.normal,
@@ -801,8 +1186,67 @@ class _MapScreenState extends State<MapScreen> {
                         child: TextField(
                           controller: _destinationController,
                           focusNode: _destinationFocus,
-                          // Destination is now a calendar-event search: the
-                          // event's built-in address becomes the map point.
+                          onChanged: _onSearchChanged,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Final Destination',
+                            hintStyle: TextStyle(
+                              color: AppColors.textTertiary,
+                              fontWeight: FontWeight.normal,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      if (_destinationController.text.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: AppColors.textTertiary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _destinationController.clear();
+                              _destinationLatLng = null;
+                              _destinationLabel = '';
+                              _route = null;
+                            });
+                            _destinationFocus.requestFocus();
+                            _onSearchChanged('');
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Container(height: 1, color: AppColors.divider),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: _eventFocus.hasFocus
+                        ? AppColors.brandTint.withValues(alpha: 0.45)
+                        : Colors.transparent,
+                    borderRadius: AppRadius.smAll,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _eventController,
+                          focusNode: _eventFocus,
                           onChanged: _onEventSearchChanged,
                           style: const TextStyle(
                             color: AppColors.textPrimary,
@@ -833,7 +1277,7 @@ class _MapScreenState extends State<MapScreen> {
                             ),
                           ),
                         )
-                      else if (_destinationController.text.isNotEmpty)
+                      else if (_eventController.text.isNotEmpty)
                         IconButton(
                           icon: const Icon(
                             Icons.close_rounded,
@@ -842,13 +1286,10 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                           onPressed: () {
                             setState(() {
-                              _destinationController.clear();
-                              _destinationLatLng = null;
-                              _destinationLabel = '';
-                              _route = null;
+                              _eventController.clear();
                               _eventSuggestions = [];
                             });
-                            _destinationFocus.requestFocus();
+                            _eventFocus.requestFocus();
                           },
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -862,7 +1303,7 @@ class _MapScreenState extends State<MapScreen> {
           ),
           Container(
             margin: const EdgeInsets.only(right: 12, left: 8),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.brandTint,
               shape: BoxShape.circle,
             ),
@@ -882,6 +1323,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget _buildSuggestionsList() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 280),
       decoration: BoxDecoration(
         color: AppColors.surface,

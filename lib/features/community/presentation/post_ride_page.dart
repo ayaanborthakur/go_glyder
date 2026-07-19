@@ -1,8 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'package:go_glyder/core/theme.dart';
+import 'package:go_glyder/core/address_autocomplete.dart';
 import 'package:go_glyder/services/firestore_service.dart';
 import 'package:go_glyder/services/places_service.dart';
 
@@ -12,12 +13,16 @@ class PostRidePage extends StatefulWidget {
   final String schoolId;
   final String groupId;
   final String? schoolName;
+  final String? initialOrigin;
+  final String? initialDestination;
 
   const PostRidePage({
     super.key,
     required this.schoolId,
     required this.groupId,
     this.schoolName,
+    this.initialOrigin,
+    this.initialDestination,
   });
 
   @override
@@ -30,17 +35,7 @@ class _PostRidePageState extends State<PostRidePage> {
   final _destC = TextEditingController();
   final _milesC = TextEditingController();
   final _notesC = TextEditingController();
-
-  final FocusNode _originFocus = FocusNode();
-  final FocusNode _destFocus = FocusNode();
-  final FocusNode _milesFocus = FocusNode();
-  final FocusNode _notesFocus = FocusNode();
-
   final PlacesService _placesService = PlacesService();
-  Timer? _debounce;
-  List<PlaceSuggestion> _suggestions = [];
-  String? _activeFieldName;
-  bool _isSearching = false;
 
   DateTime? _date;
   TimeOfDay? _time;
@@ -50,41 +45,14 @@ class _PostRidePageState extends State<PostRidePage> {
   @override
   void initState() {
     super.initState();
-    if (widget.schoolName != null && widget.schoolName!.isNotEmpty) {
+    if (widget.initialOrigin != null && widget.initialOrigin!.isNotEmpty) {
+      _originC.text = widget.initialOrigin!;
+    }
+    if (widget.initialDestination != null && widget.initialDestination!.isNotEmpty) {
+      _destC.text = widget.initialDestination!;
+    } else if (widget.schoolName != null && widget.schoolName!.isNotEmpty) {
       _destC.text = widget.schoolName!;
     }
-    _originFocus.addListener(() {
-      if (_originFocus.hasFocus) {
-        setState(() {
-          _activeFieldName = 'origin';
-          _onSearchChanged(_originC.text);
-        });
-      }
-    });
-    _destFocus.addListener(() {
-      if (_destFocus.hasFocus) {
-        setState(() {
-          _activeFieldName = 'destination';
-          _onSearchChanged(_destC.text);
-        });
-      }
-    });
-    _milesFocus.addListener(() {
-      if (_milesFocus.hasFocus) {
-        setState(() {
-          _suggestions = [];
-          _activeFieldName = null;
-        });
-      }
-    });
-    _notesFocus.addListener(() {
-      if (_notesFocus.hasFocus) {
-        setState(() {
-          _suggestions = [];
-          _activeFieldName = null;
-        });
-      }
-    });
   }
 
   @override
@@ -93,29 +61,7 @@ class _PostRidePageState extends State<PostRidePage> {
     _destC.dispose();
     _milesC.dispose();
     _notesC.dispose();
-    _originFocus.dispose();
-    _destFocus.dispose();
-    _milesFocus.dispose();
-    _notesFocus.dispose();
-    _debounce?.cancel();
     super.dispose();
-  }
-
-  void _onSearchChanged(String query) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
-      if (query.trim().isEmpty) {
-        setState(() => _suggestions = []);
-        return;
-      }
-      setState(() => _isSearching = true);
-      final results = await _placesService.searchPlaces(query);
-      if (!mounted) return;
-      setState(() {
-        _suggestions = results;
-        _isSearching = false;
-      });
-    });
   }
 
   Future<void> _pickDate() async {
@@ -146,13 +92,36 @@ class _PostRidePageState extends State<PostRidePage> {
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
     try {
+      final originAddress = _originC.text.trim();
+      final destAddress = _destC.text.trim();
+      final formattedTime = _time!.format(context);
+
+      // Geocode locations
+      LatLng? originLatLng = await _placesService.geocodeAddress(originAddress);
+      LatLng? destLatLng = await _placesService.geocodeAddress(destAddress);
+
+      if (originLatLng == null) {
+        _showError('Could not find the pickup location on the map.');
+        setState(() => _isLoading = false);
+        return;
+      }
+      if (destLatLng == null) {
+        _showError('Could not find the destination on the map.');
+        setState(() => _isLoading = false);
+        return;
+      }
+
       await FirestoreService.instance.createTrip(
         schoolId: widget.schoolId,
         groupId: widget.groupId,
-        origin: _originC.text.trim(),
-        destination: _destC.text.trim(),
+        origin: originAddress,
+        destination: destAddress,
+        originLat: originLatLng.latitude,
+        originLng: originLatLng.longitude,
+        destinationLat: destLatLng.latitude,
+        destinationLng: destLatLng.longitude,
         date: _date!,
-        time: _time!.format(context),
+        time: formattedTime,
         seats: _seats,
         distanceMiles: double.tryParse(_milesC.text.trim()) ?? 0,
         notes: _notesC.text.trim(),
@@ -184,11 +153,8 @@ class _PostRidePageState extends State<PostRidePage> {
           padding: const EdgeInsets.all(20),
           children: [
             _label('Pickup location'),
-            TextFormField(
+            AddressAutocompleteField(
               controller: _originC,
-              focusNode: _originFocus,
-              onChanged: _onSearchChanged,
-              textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
                 hintText: 'Where you start from',
                 prefixIcon: Icon(Icons.trip_origin_rounded),
@@ -196,23 +162,10 @@ class _PostRidePageState extends State<PostRidePage> {
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter a pickup point' : null,
             ),
-            if (_activeFieldName == 'origin' && (_isSearching || _suggestions.isNotEmpty))
-              _buildSuggestionsList(
-                onSelect: (suggestion) {
-                  setState(() {
-                    _originC.text = suggestion.description;
-                    _suggestions = [];
-                  });
-                  _originFocus.unfocus();
-                },
-              ),
             const SizedBox(height: 18),
             _label('Drop-off'),
-            TextFormField(
+            AddressAutocompleteField(
               controller: _destC,
-              focusNode: _destFocus,
-              onChanged: _onSearchChanged,
-              textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
                 hintText: 'School or destination',
                 prefixIcon: Icon(Icons.place_rounded),
@@ -220,16 +173,6 @@ class _PostRidePageState extends State<PostRidePage> {
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter a destination' : null,
             ),
-            if (_activeFieldName == 'destination' && (_isSearching || _suggestions.isNotEmpty))
-              _buildSuggestionsList(
-                onSelect: (suggestion) {
-                  setState(() {
-                    _destC.text = suggestion.description;
-                    _suggestions = [];
-                  });
-                  _destFocus.unfocus();
-                },
-              ),
             const SizedBox(height: 18),
             Row(
               children: [
@@ -257,7 +200,6 @@ class _PostRidePageState extends State<PostRidePage> {
             _label('Approx. one-way distance  (miles)'),
             TextFormField(
               controller: _milesC,
-              focusNode: _milesFocus,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 hintText: 'e.g. 4',
@@ -269,7 +211,6 @@ class _PostRidePageState extends State<PostRidePage> {
             _label('Notes  (optional)'),
             TextFormField(
               controller: _notesC,
-              focusNode: _notesFocus,
               textCapitalization: TextCapitalization.sentences,
               maxLines: 2,
               decoration: const InputDecoration(
@@ -295,64 +236,6 @@ class _PostRidePageState extends State<PostRidePage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildSuggestionsList({required ValueChanged<PlaceSuggestion> onSelect}) {
-    if (_isSearching) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.brandGreen,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_suggestions.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(top: 4, bottom: 8),
-      constraints: const BoxConstraints(maxHeight: 200),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppRadius.smAll,
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const ClampingScrollPhysics(),
-        itemCount: _suggestions.length,
-        separatorBuilder: (context, index) =>
-            const Divider(height: 1, color: AppColors.divider),
-        itemBuilder: (context, index) {
-          final suggestion = _suggestions[index];
-          return ListTile(
-            dense: true,
-            leading: const Icon(
-              Icons.location_on,
-              color: AppColors.brandGreen,
-              size: 18,
-            ),
-            title: Text(
-              suggestion.description,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            onTap: () => onSelect(suggestion),
-          );
-        },
       ),
     );
   }
