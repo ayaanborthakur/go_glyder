@@ -13,6 +13,7 @@
 // requires a secret code (see claimSchoolAdmin) — that's the one thing that
 // actually needs to be un-fakeable.
 
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -154,6 +155,47 @@ class FirestoreService {
       final list = d.data()?['schools'] as List?;
       return list?.cast<String>() ?? const <String>[];
     });
+  }
+
+  /// Stream the school's private config (only accessible by verified school admins).
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamSchoolPrivateConfig(String schoolId) {
+    return schools.doc(schoolId).collection('private').doc('config').snapshots();
+  }
+
+  /// Generate or refresh the school's numeric 6-digit join code.
+  Future<void> refreshSchoolJoinCode(String schoolId) async {
+    final newCode = _generateRandom6DigitCode();
+    await schools.doc(schoolId).collection('private').doc('config').set({
+      'joinCode': newCode,
+    }, SetOptions(merge: true));
+  }
+
+  /// Attempts to join a school as a member by verifying the 6-digit numeric code.
+  Future<void> joinSchoolWithCode({
+    required String schoolId,
+    required String code,
+  }) async {
+    final uid = _uid;
+    if (uid == null) throw GroupException('You must be signed in.');
+
+    try {
+      await schools.doc(schoolId).collection('verified_members').doc(uid).set({
+        'code': code.trim(),
+        'joinedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        throw GroupException("That join code isn't valid for this school.");
+      }
+      rethrow;
+    }
+
+    await joinSchool(schoolId);
+  }
+
+  String _generateRandom6DigitCode() {
+    final rnd = Random.secure();
+    return List.generate(6, (_) => rnd.nextInt(10).toString()).join();
   }
 
   // ---------------------------------------------------------------------

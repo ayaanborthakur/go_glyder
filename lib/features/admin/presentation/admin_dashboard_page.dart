@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/features/admin/presentation/admin_calendar_page.dart';
@@ -37,6 +38,8 @@ class AdminDashboardPage extends StatelessWidget {
                   _header(name),
                   const SizedBox(height: 18),
                   _calendarCard(context, name),
+                  const SizedBox(height: 22),
+                  _joinCodeCard(context, schoolId),
                   const SizedBox(height: 22),
                   const _SectionLabel('Usage at a glance'),
                   const SizedBox(height: 12),
@@ -159,6 +162,129 @@ class AdminDashboardPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _joinCodeCard(BuildContext context, String schoolId) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _fs.streamSchoolPrivateConfig(schoolId),
+      builder: (context, snap) {
+        final data = snap.data?.data();
+        final joinCode = data?['joinCode'] as String?;
+
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppRadius.lgAll,
+            boxShadow: kCardShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.vpn_key_rounded, color: AppColors.brandGreen, size: 20),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'School join code',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (joinCode != null)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: joinCode));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Join code copied to clipboard!')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy', style: TextStyle(fontSize: 13)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (joinCode == null) ...[
+                const Text(
+                  'No join code has been generated for this school yet. Parents and staff need a code to join this school.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _fs.refreshSchoolJoinCode(schoolId),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Generate Join Code'),
+                  ),
+                ),
+              ] else ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      joinCode.split('').join(' '),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                        color: AppColors.brandDark,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Refresh code',
+                      icon: const Icon(Icons.refresh_rounded, color: AppColors.textTertiary),
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Refresh join code?'),
+                            content: const Text(
+                              'This will deactivate the current join code immediately. '
+                              'Any new users will need the new code to join. '
+                              'Existing members will remain in the school.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.danger,
+                                ),
+                                onPressed: () => Navigator.of(context).pop(true),
+                                child: const Text('Refresh'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await _fs.refreshSchoolJoinCode(schoolId);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Share this 6-digit code with parents and staff so they can join your school community. Refresh it if it gets leaked.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.35),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 

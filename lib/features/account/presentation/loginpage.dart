@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-
 import 'package:go_glyder/core/theme.dart';
 import 'package:go_glyder/features/account/scripts/auth.dart';
 
@@ -70,8 +69,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Spacer(flex: 4),
                   _buildSignInSection(),
                   const SizedBox(height: 28),
-                  _buildFooter(),
-                  const Spacer(flex: 1),
                 ],
               ),
             ),
@@ -87,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Container(
               width: 100,
               height: 100,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(1),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(28),
@@ -105,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 errorBuilder: (_, _, _) => const Icon(
                   Icons.directions_bus_rounded,
                   color: AppColors.brandDark,
-                  size: 48,
+                  size: 100,
                 ),
               ),
             )
@@ -119,24 +116,30 @@ class _LoginScreenState extends State<LoginScreen> {
             .fadeIn(duration: 400.ms),
         const SizedBox(height: 28),
         const Text(
-          'GoGlyder',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 36,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.8,
-          ),
-        ).animate(delay: 200.ms).fadeIn(duration: 500.ms).slideY(begin: 0.3, end: 0),
+              'GoGlyder',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.8,
+              ),
+            )
+            .animate(delay: 200.ms)
+            .fadeIn(duration: 500.ms)
+            .slideY(begin: 0.3, end: 0),
         const SizedBox(height: 10),
         Text(
-          'Smarter, greener school carpooling',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.75),
-            fontSize: 15.5,
-            height: 1.4,
-          ),
-        ).animate(delay: 340.ms).fadeIn(duration: 500.ms).slideY(begin: 0.3, end: 0),
+              'Smarter, greener school carpooling',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.75),
+                fontSize: 15.5,
+                height: 1.4,
+              ),
+            )
+            .animate(delay: 340.ms)
+            .fadeIn(duration: 500.ms)
+            .slideY(begin: 0.3, end: 0),
       ],
     );
   }
@@ -216,30 +219,18 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
-  Widget _buildFooter() {
-    return Text(
-      'By continuing you agree to GoGlyder\'s Terms & Privacy Policy',
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.55),
-        fontSize: 12.5,
-        height: 1.4,
-      ),
-    ).animate(delay: 620.ms).fadeIn(duration: 500.ms);
-  }
 }
 
 /// Microsoft's four-square brand mark, drawn directly (no asset needed).
 class _MicrosoftLogo extends StatelessWidget {
   final double size;
+
   const _MicrosoftLogo({required this.size});
 
   @override
   Widget build(BuildContext context) {
     final tile = size / 2 - 1;
-    Widget square(Color c) =>
-        Container(width: tile, height: tile, color: c);
+    Widget square(Color c) => Container(width: tile, height: tile, color: c);
     return SizedBox(
       width: size,
       height: size,

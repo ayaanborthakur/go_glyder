@@ -484,11 +484,110 @@ class _CommunityPageState extends State<CommunityPage> {
       builder: (_) => const _SchoolPickerSheet(),
     );
     if (chosen == null) return;
+
+    if (!mounted) return;
+
+    // Prompt for the 6-digit join code
+    final code = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_rounded, color: AppColors.brandGreen),
+              SizedBox(width: 10),
+              Text('Enter Join Code', style: TextStyle(fontWeight: FontWeight.w800)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'To ensure safety, please enter the 6-digit numeric code provided by your school.',
+                style: TextStyle(fontSize: 13, height: 1.35),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                autofocus: true,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                ),
+                decoration: const InputDecoration(
+                  hintText: 'e.g. 123456',
+                  prefixIcon: Icon(Icons.pin_rounded),
+                  counterText: '',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final input = controller.text.trim();
+                if (input.length != 6 || int.tryParse(input) == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid 6-digit code.'),
+                      backgroundColor: AppColors.danger,
+                    ),
+                  );
+                  return;
+                }
+                Navigator.of(context).pop(input);
+              },
+              child: const Text('Submit', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (code == null || code.isEmpty) return;
+
+    // Show a loading indicator while we verify
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation(Colors.white),
+        ),
+      ),
+    );
+
     try {
-      await _fs.joinSchool(chosen);
-      if (mounted) setState(() => _selectedSchoolId = chosen);
+      await _fs.joinSchoolWithCode(schoolId: chosen, code: code);
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading dialog
+        setState(() => _selectedSchoolId = chosen);
+        _notify('Joined school successfully!');
+      }
+    } on GroupException catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading dialog
+        _notify(e.message);
+      }
     } catch (_) {
-      _notify('Could not join that school.');
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading dialog
+        _notify('Could not join that school.');
+      }
     }
   }
 

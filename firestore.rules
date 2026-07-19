@@ -44,10 +44,23 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/schools/$(schoolId)/admins/$(request.auth.uid)) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['calendars']);
 
-      // Secret config (the admin code). No client can read or write it, but
-      // security-rule get() below still reads it server-side to verify.
+      // Secret config (the admin code and join code).
+      // Verified school admins can read and update/refresh it.
       match /private/{doc} {
-        allow read, write: if false;
+        allow read, write: if isSignedIn() &&
+          exists(/databases/$(database)/documents/schools/$(schoolId)/admins/$(request.auth.uid));
+      }
+
+      // School join codes verification roster.
+      // Anyone can register as a verified member if they supply the correct join code.
+      match /verified_members/{memberUid} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.auth.uid == memberUid
+          && request.resource.data.code ==
+             get(/databases/$(database)/documents/schools/$(schoolId)/private/config)
+               .data.joinCode;
+        allow delete: if isSignedIn() && request.auth.uid == memberUid;
       }
 
       // Verified admin roster. You can only add YOURSELF, and only if the
